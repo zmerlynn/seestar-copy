@@ -21,6 +21,11 @@ const pageURL = (p) => (p ? '/?path=' + encodeURIComponent(p) : '/');
 const fileURL = (p, save) => '/file?path=' + encodeURIComponent(p) + (save ? '&download=1' : '');
 const baseName = (p) => p.slice(p.lastIndexOf('/') + 1);
 const plainClick = (ev) => ev.button === 0 && !ev.ctrlKey && !ev.metaKey && !ev.shiftKey && !ev.altKey;
+const count = (n, word) => n + ' ' + word + (n === 1 ? '' : 's');
+// withHint ends a message as a sentence and adds how to retry.
+const withHint = (msg, hint) => msg.replace(/[^.!?]$/, '$&.') + ' ' + hint;
+const listHint = 'Select Share or a parent folder above, or reload this page to retry.';
+const viewHint = 'Close this preview and reopen the file to retry.';
 
 function el(tag, text, cls) {
   const e = document.createElement(tag);
@@ -47,16 +52,18 @@ function folderLink(p, text) {
     if (!plainClick(ev)) return;
     ev.preventDefault();
     history.pushState(null, '', pageURL(p));
-    load(p);
+    load(p, true);
   });
   return a;
 }
 
 function showCrumbs(p) {
   crumbs.replaceChildren(folderLink('', 'Share'));
-  if (!p) return;
-  const parts = p.split('/');
-  parts.forEach((part, i) => crumbs.append(' / ', folderLink(parts.slice(0, i + 1).join('/'), part)));
+  if (p) {
+    const parts = p.split('/');
+    parts.forEach((part, i) => crumbs.append(' / ', folderLink(parts.slice(0, i + 1).join('/'), part)));
+  }
+  crumbs.lastChild.setAttribute('aria-current', 'page');
 }
 
 // fitsCards splits the start of a FITS file, one character per byte, into
@@ -100,7 +107,7 @@ async function showText(e, kind, signal) {
     }
   } catch (err) {
     if (signal.aborted) return;
-    viewNote.textContent = 'Could not read this file: ' + err.message;
+    viewNote.textContent = withHint('Could not read this file: ' + err.message, viewHint);
   }
 }
 
@@ -192,14 +199,17 @@ function render(data) {
   const files = data.entries.filter((e) => e.type === 'file');
   rows.replaceChildren(...dirs.map(row), ...files.map(row));
   table.hidden = rows.children.length === 0;
-  statusLine.textContent = table.hidden ? 'Empty folder' : '';
+  statusLine.textContent = table.hidden ? 'Empty folder' : count(dirs.length, 'folder') + ', ' + count(files.length, 'file') + '.';
 }
 
-async function load(p) {
+// load shows folder p. focus, for a navigation the user asked for, moves
+// focus to the folder's own breadcrumb, since the link they used is gone.
+async function load(p, focus) {
   const mine = ++generation;
   if (loading) loading.abort();
   loading = new AbortController();
   showCrumbs(p);
+  if (focus) crumbs.lastChild.focus();
   statusLine.textContent = 'Loading…';
   table.hidden = true;
   rows.replaceChildren();
@@ -209,12 +219,12 @@ async function load(p) {
     data = await res.json();
     if (mine !== generation) return;
     if (!res.ok) {
-      statusLine.textContent = data.message;
+      statusLine.textContent = withHint(data.message, listHint);
       return;
     }
   } catch (err) {
     if (mine !== generation) return;
-    statusLine.textContent = 'Could not load this folder: ' + err.message;
+    statusLine.textContent = withHint('Could not load this folder: ' + err.message, listHint);
     return;
   }
   render(data);
@@ -237,5 +247,5 @@ viewer.addEventListener('close', () => {
   viewed.alt = '';
   viewedText.textContent = '';
 });
-window.addEventListener('popstate', () => load(current()));
+window.addEventListener('popstate', () => load(current(), true));
 load(current());
