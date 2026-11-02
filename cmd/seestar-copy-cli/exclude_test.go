@@ -144,8 +144,9 @@ func localFiles(t *testing.T, dest string) []string {
 
 // The defaults copy the whole share except what they match, from root files
 // to new top-level folders; a matched folder is never listed, so one that
-// cannot be listed does not fail the pass. Without the defaults that
-// folder is listed and fails the pass.
+// cannot be listed does not fail the pass. Each skipped entry is logged
+// once, a folder without its contents. Without the defaults that folder is
+// listed and fails the pass.
 func TestSyncSelection(t *testing.T) {
 	dev := selectionDevice(t)
 	dest, stateDir := t.TempDir(), t.TempDir()
@@ -159,8 +160,9 @@ func TestSyncSelection(t *testing.T) {
 	if got := slices.Sorted(maps.Keys(records(t, stateDir))); !slices.Equal(got, selectionCopied) {
 		t.Errorf("recorded %q, want %q", got, selectionCopied)
 	}
-	if strings.Contains(stderr, "would skip") {
-		t.Errorf("a real pass logs skips:\n%s", stderr)
+	checkLines(t, stderr, "msg=skipped ", selectionSkips("skipped"))
+	if want := `msg="pass done" copied=8 replaced=0 adopted=0 waiting=0 failed=0 skipped=10 `; !strings.Contains(stderr, want) || strings.Contains(stderr, "would skip") {
+		t.Errorf("log lacks %q or has a dry-run line:\n%s", want, stderr)
 	}
 
 	// --exclude adds to the defaults.
@@ -208,7 +210,7 @@ func TestSyncSelection(t *testing.T) {
 	dev.set("Autorun/Light/one.fit", "abc", time.Now().Add(-time.Minute))
 	place(t, dest, "diag.png", "abc", old)
 	code, _, stderr = invoke(t, "sync", "--endpoint", "h:445", "--dest", dest, "--state-dir", stateDir, "--once")
-	if want := "copied=8 replaced=0 adopted=1 waiting=2 failed=0"; code != exitOK || !strings.Contains(stderr, want) {
+	if want := "copied=8 replaced=0 adopted=1 waiting=2 failed=0 skipped=11 "; code != exitOK || !strings.Contains(stderr, want) {
 		t.Errorf("upgrade: exit %d, log lacks %q:\n%s", code, want, stderr)
 	}
 	wantFiles := append(slices.Clone(selectionCopied), "Autorun/Light/old.fit")
@@ -236,18 +238,7 @@ func TestDryRunReportsSelection(t *testing.T) {
 	if code != exitOK {
 		t.Fatalf("exit %d\n%s", code, stderr)
 	}
-	skips := []string{
-		`msg="would skip" path=$RECYCLE.BIN exclude=$RECYCLE.BIN`,
-		`msg="would skip" path=.DS_Store exclude=.*`,
-		`msg="would skip" path=.StackReplayTemp exclude=.*`,
-		`msg="would skip" path="MyWorks/M 31/Thumbs.db" exclude=Thumbs.db`,
-		`msg="would skip" path=MyWorks/desktop.ini exclude=desktop.ini`,
-		`msg="would skip" path="System Volume Information" exclude="System Volume Information"`,
-		`msg="would skip" path=Video/x.mp4.tmp exclude=*.tmp`,
-		`msg="would skip" path=batch_stack_tmp exclude=/batch_stack_tmp`,
-		`msg="would skip" path=log exclude=/log`,
-		`msg="would skip" path=tmp_stitch exclude=/tmp_stitch`,
-	}
+	skips := selectionSkips(`"would skip"`)
 	folders := func(names ...string) []string {
 		var lines []string
 		for _, n := range names {
@@ -257,8 +248,8 @@ func TestDryRunReportsSelection(t *testing.T) {
 	}
 	checkLines(t, stderr, "would skip", skips)
 	checkLines(t, stderr, "no copied files recorded", folders("Autorun", "MyWorks", "Preview", "Video"))
-	if want := `msg="dry run done" copy=8 `; !strings.Contains(stderr, want) {
-		t.Errorf("log lacks %q:\n%s", want, stderr)
+	if want := `msg="dry run done" copy=8 replace=0 adopt=0 waiting=0 failed=0 skipped=10 `; !strings.Contains(stderr, want) || strings.Contains(stderr, "msg=skipped") {
+		t.Errorf("log lacks %q or has a real-pass skip line:\n%s", want, stderr)
 	}
 
 	// After a real pass only a new folder has nothing recorded. Autorun
@@ -277,6 +268,27 @@ func TestDryRunReportsSelection(t *testing.T) {
 	}
 	checkLines(t, stderr, "would skip", skips)
 	checkLines(t, stderr, "no copied files recorded", folders("Plan"))
+}
+
+// selectionSkips are the skip lines for selectionDevice under the defaults,
+// with msg as the message.
+func selectionSkips(msg string) []string {
+	var lines []string
+	for _, s := range []string{
+		`path=$RECYCLE.BIN exclude=$RECYCLE.BIN`,
+		`path=.DS_Store exclude=.*`,
+		`path=.StackReplayTemp exclude=.*`,
+		`path="MyWorks/M 31/Thumbs.db" exclude=Thumbs.db`,
+		`path=MyWorks/desktop.ini exclude=desktop.ini`,
+		`path="System Volume Information" exclude="System Volume Information"`,
+		`path=Video/x.mp4.tmp exclude=*.tmp`,
+		`path=batch_stack_tmp exclude=/batch_stack_tmp`,
+		`path=log exclude=/log`,
+		`path=tmp_stitch exclude=/tmp_stitch`,
+	} {
+		lines = append(lines, "msg="+msg+" "+s)
+	}
+	return lines
 }
 
 // checkLines checks that the lines of log containing key end with want, in

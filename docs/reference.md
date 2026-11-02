@@ -97,7 +97,9 @@ the share are listed but neither followed nor copied.
 Sync copies the whole share, except files and folders that an exclude pattern
 matches. An excluded folder is skipped with everything in it and is never
 listed. Excluded files are not copied, adopted or recorded. Files already
-recorded in the state stay recorded.
+recorded in the state stay recorded. Each pass logs a `skipped` line for each
+excluded file or folder, with the pattern that matched, and counts them in its
+summary; a folder has one line, and what is in it has none.
 
 Unless `--no-default-excludes` is given, sync leaves out what these flags
 would:
@@ -412,13 +414,14 @@ one stopped.
 
 Sync logs to stderr, as text lines in Go's `log/slog` format, with UTC
 timestamps to the millisecond. Help, `--version` and `licenses` write to
-stdout. Per-file lines are logged as each file finishes. A pass that copies two
-files looks like this:
+stdout. Per-file lines are logged as each file finishes. A pass that skips the
+`log` folder and copies two files looks like this:
 
 ```text
+time=2026-11-02T03:10:00.118Z level=INFO msg=skipped path=log exclude=/log
 time=2026-11-02T03:10:01.620Z level=INFO msg="file copied" path="MyWorks/M 31/light_002.fit" size=16000000
 time=2026-11-02T03:10:03.290Z level=INFO msg="file copied" path="MyWorks/M 31/light_003.fit" size=16000000
-time=2026-11-02T03:10:03.502Z level=INFO msg="pass done" copied=2 replaced=0 adopted=0 waiting=1 failed=0 bytes=32000000 elapsed=3.502s
+time=2026-11-02T03:10:03.502Z level=INFO msg="pass done" copied=2 replaced=0 adopted=0 waiting=1 failed=0 skipped=1 bytes=32000000 elapsed=3.502s
 ```
 
 Values with spaces or quotes are quoted. The messages and keys below are
@@ -432,6 +435,7 @@ changes them says so in its notes.
 | INFO | `file replaced` | `path`, `size` | A file that changed on the device was downloaded again. |
 | INFO | `file adopted` | `path`, `size` | A file already in the destination was hashed and recorded. |
 | WARN | `file failed` | `path`, `reason` | A file failed this pass; it is tried again next pass. |
+| INFO | `skipped` | `path`, `exclude` | The file or folder matches the pattern `exclude`, the first one that matched, and is left out. A folder has one line; what is in it is not listed. See [selection](#selection). |
 | INFO | `pass done` | see below | A pass finished. |
 | ERROR | `pass failed` | see below, and `error` | The connection or a listing failed. |
 | INFO | `pass stopped` | see below | A signal stopped the pass. |
@@ -439,9 +443,9 @@ changes them says so in its notes.
 | INFO | `would replace` | `path`, `size` | Dry run: the file changed on the device and would be downloaded again. |
 | INFO | `would adopt` | `path`, `size` | Dry run: the file is already in the destination and would be hashed and recorded. |
 | INFO | `would wait` | `path`, `size` | Dry run: the file is not ready yet. |
-| INFO | `would skip` | `path`, `exclude` | Dry run: the file or folder matches the pattern `exclude`, the first one that matched, and is left out. A folder has one line; what is in it is not listed. |
+| INFO | `would skip` | `path`, `exclude` | Dry run: the same as `skipped`. |
 | INFO | `no copied files recorded under this top-level folder` | `folder` | Dry run: the state has no file under this folder at the share root, such as a folder a new release now covers. |
-| INFO | `dry run done` | `copy`, `replace`, `adopt`, `waiting`, `failed`, `bytes`, `elapsed` | A dry run finished. The counts are of the lines above and of `file failed` lines; `bytes` is what it would download. |
+| INFO | `dry run done` | `copy`, `replace`, `adopt`, `waiting`, `failed`, `skipped`, `bytes`, `elapsed` | A dry run finished. The counts are of the lines above and of `file failed` lines; `bytes` is what it would download. |
 | ERROR | `dry run failed` | as `dry run done`, and `error` | The connection or a listing failed in a dry run. |
 | INFO | `dry run stopped` | as `dry run done` | A signal stopped a dry run. |
 | WARN | `dropped the torn final line of the state file` | `file`, `line`, `reason` | See [format](#format). |
@@ -460,6 +464,7 @@ Every pass ends with one summary line, whose keys are:
 | `adopted` | Files hashed in place and recorded as `adopted`. |
 | `waiting` | Files not ready yet. They have no line of their own. |
 | `failed` | Files that failed, each with its own `file failed` line, plus files cut off by a stop. |
+| `skipped` | Files and folders an exclude left out, each with its own `skipped` line. What is in a skipped folder is not counted. |
 | `bytes` | Bytes downloaded: the sizes of the copied and replaced files. |
 | `elapsed` | The pass's duration, as a Go duration such as `3.502s` or `2m5.1s`. |
 

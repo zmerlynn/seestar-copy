@@ -259,15 +259,16 @@ type syncer struct {
 	firstPass bool
 }
 
-// pass runs one pass, logs its summary and returns how many files failed. An
-// error means the session or a listing failed, and nothing was copied.
+// pass runs one pass, logs a line for each entry an exclude skipped and its
+// summary, and returns how many files failed. An error means the session or
+// a listing failed, and nothing was copied.
 func (s *syncer) pass(ctx context.Context) (failed int, err error) {
 	start := time.Now()
-	var copied, replaced, adopted, waiting int
+	var copied, replaced, adopted, waiting, skipped int
 	var bytes int64
 	defer func() {
 		args := []any{"copied", copied, "replaced", replaced, "adopted", adopted, "waiting", waiting,
-			"failed", failed, "bytes", bytes, "elapsed", time.Since(start).Round(time.Millisecond)}
+			"failed", failed, "skipped", skipped, "bytes", bytes, "elapsed", time.Since(start).Round(time.Millisecond)}
 		switch {
 		case ctx.Err() != nil:
 			s.log.Info("pass stopped", args...)
@@ -284,9 +285,13 @@ func (s *syncer) pass(ctx context.Context) (failed int, err error) {
 		return 0, fmt.Errorf("connect to %s: %w", s.opts.endpoint, err)
 	}
 	defer sess.Close()
-	decisions, counts, _, err := s.decide(ctx, sess)
+	decisions, counts, sel, err := s.decide(ctx, sess)
 	if err != nil {
 		return 0, err
+	}
+	skipped = len(sel.skipped)
+	for _, x := range sel.skipped {
+		s.log.Info("skipped", "path", x.path, "exclude", x.by.flag)
 	}
 	// Each file is logged as it finishes, not at the end of the pass.
 	s.copier.Run(ctx, sess, s.opts.workers, decisions, func(r copier.Result) {
@@ -326,10 +331,11 @@ func (s *syncer) pass(ctx context.Context) (failed int, err error) {
 func (s *syncer) dryPass(ctx context.Context) (failed int, err error) {
 	start := time.Now()
 	var counts plan.Counts
+	var sel selection
 	var bytes int64
 	defer func() {
 		args := []any{"copy", counts.Copy, "replace", counts.Replace, "adopt", counts.Adopt, "waiting", counts.Wait,
-			"failed", counts.Fail, "bytes", bytes, "elapsed", time.Since(start).Round(time.Millisecond)}
+			"failed", counts.Fail, "skipped", len(sel.skipped), "bytes", bytes, "elapsed", time.Since(start).Round(time.Millisecond)}
 		switch {
 		case ctx.Err() != nil:
 			s.log.Info("dry run stopped", args...)
@@ -345,7 +351,6 @@ func (s *syncer) dryPass(ctx context.Context) (failed int, err error) {
 	}
 	defer sess.Close()
 	var decisions []plan.Decision
-	var sel selection
 	decisions, counts, sel, err = s.decide(ctx, sess)
 	if err != nil {
 		return 0, err
