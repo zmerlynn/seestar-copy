@@ -229,6 +229,31 @@ func TestFindMissingDestination(t *testing.T) {
 	}
 }
 
+// A state that exists for a destination that does not: find still gives
+// each file its status from the state, and creates no destination.
+func TestFindMissingDestinationWithState(t *testing.T) {
+	statusDevice(t)
+	dest, stateDir := filepath.Join(t.TempDir(), "dest"), filepath.Join(t.TempDir(), "state")
+	writeFindState(t, dest, stateDir)
+	if err := os.Remove(dest); err != nil {
+		t.Fatal(err)
+	}
+	code, stdout, stderr := find(t, "--dest", dest, "--state-dir", stateDir)
+	want := `d 0 2026-10-31T01:00:00Z - MyWorks
+- 0 2026-11-01T05:04:05.1234567Z new MyWorks/<x>&.fit
+- 3 2026-11-01T05:04:05.1234567Z copied MyWorks/a.fit
+- 4 2026-11-01T05:04:05.1234567Z changed MyWorks/b.fit
+- 3 2026-11-01T05:04:05.1234567Z changed MyWorks/c.fit
+- 3 2026-11-01T05:04:05.1234567Z new MyWorks/d.fit
+`
+	if code != exitOK || stdout != want {
+		t.Errorf("exit %d, stdout:\n%s\nwant:\n%s\n%s", code, stdout, want, stderr)
+	}
+	if _, err := os.Lstat(dest); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("%s: %v, want it not created", dest, err)
+	}
+}
+
 // find turns the read-only guard on, so the coverage test of
 // internal/readonly protects it as it does a dry run.
 func TestFindIsReadOnly(t *testing.T) {
