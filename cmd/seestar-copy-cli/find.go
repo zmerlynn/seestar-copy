@@ -183,6 +183,9 @@ func list(ctx context.Context, o findOptions, records map[string]state.Record, o
 	enc := json.NewEncoder(w)
 	enc.SetEscapeHTML(false)
 	for _, e := range entries {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("write the listing: %w", err)
+		}
 		l := listed{Path: e.Path, Size: e.Size, MTime: e.ModTime.UTC().Format(time.RFC3339Nano)}
 		switch e.Kind {
 		case remote.Dir:
@@ -214,6 +217,9 @@ func list(ctx context.Context, o findOptions, records map[string]state.Record, o
 		}
 	}
 	if err := w.Flush(); err != nil {
+		return fmt.Errorf("write the listing: %w", err)
+	}
+	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("write the listing: %w", err)
 	}
 	return nil

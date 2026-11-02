@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"maps"
 	"os"
@@ -391,6 +392,41 @@ func TestFindWriteFails(t *testing.T) {
 	code := run(context.Background(), []string{"find", "--endpoint", "h:445"}, &failingWriter{}, &stderr)
 	if code != exitFailure || !strings.Contains(stderr.String(), `msg="find failed" error="write the listing: output unavailable"`) {
 		t.Errorf("exit %d\n%s", code, stderr.String())
+	}
+}
+
+// cancelingWriter cancels the invocation on its first write, as a signal
+// during the output would, and counts the writes.
+type cancelingWriter struct {
+	cancel context.CancelFunc
+	writes int
+}
+
+func (w *cancelingWriter) Write(p []byte) (int, error) {
+	w.writes++
+	w.cancel()
+	return len(p), nil
+}
+
+// A signal while find writes the listing exits 1 and stops the output:
+// with a short listing, at the final flush; with a long one, at the next
+// entry, so nothing more is written.
+func TestFindStoppedDuringOutput(t *testing.T) {
+	for _, n := range []int{1, 500} {
+		dev := newDevice()
+		for i := range n {
+			dev.set(fmt.Sprintf("MyWorks/light_%04d.fit", i), "a", findT0)
+		}
+		dev.use(t)
+		t.Cleanup(readonly.Reset)
+		ctx, cancel := context.WithCancel(context.Background())
+		w := &cancelingWriter{cancel: cancel}
+		var stderr bytes.Buffer
+		code := run(ctx, []string{"find", "--endpoint", "h:445"}, w, &stderr)
+		cancel()
+		if code != exitFailure || w.writes != 1 || !strings.Contains(stderr.String(), `msg="find failed" error="write the listing: context canceled"`) {
+			t.Errorf("%d files: exit %d, %d writes; want 1 and 1\n%s", n, code, w.writes, stderr.String())
+		}
 	}
 }
 
