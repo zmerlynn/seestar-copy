@@ -439,7 +439,7 @@ type skippedEntry struct {
 // the pass.
 func (s *syncer) list(ctx context.Context, sess remote.Session) ([]plan.Entry, selection, error) {
 	var sel selection
-	entries, err := sess.Walk(ctx, ".", func(p string) bool {
+	entries, err := sess.Walk(ctx, func(p string) bool {
 		e, ok := excluded(s.opts.excludes, p)
 		if ok {
 			sel.skipped = append(sel.skipped, skippedEntry{p, e})
