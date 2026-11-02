@@ -128,8 +128,14 @@ func pageURL(addr netip.AddrPort) string {
 // exposed reports whether a listener on ip serves other computers.
 func exposed(ip netip.Addr) bool { return !ip.IsLoopback() }
 
-// openBrowser opens a URL in the default browser. Tests replace it.
+// openBrowser opens a URL in the default browser without waiting for it,
+// and logs a failure it sees. Tests replace it.
 var openBrowser = openURL
+
+// warnOpen logs that the browser could not be opened.
+func warnOpen(log *slog.Logger, err error) {
+	log.Warn("could not open a browser", "error", err)
+}
 
 // runBrowse serves the page until ctx is done. A stop by ctx returns nil.
 func runBrowse(ctx context.Context, o browseOptions, out io.Writer, log *slog.Logger) error {
@@ -217,9 +223,7 @@ func announce(o browseOptions, addr netip.AddrPort, out io.Writer, log *slog.Log
 		return fmt.Errorf("print the URL: %w", err)
 	}
 	if o.open {
-		if err := openBrowser(url); err != nil {
-			log.Warn("could not open a browser", "error", err)
-		}
+		openBrowser(url, log)
 	}
 	return nil
 }

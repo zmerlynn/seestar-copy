@@ -1,9 +1,22 @@
 package main
 
-import "golang.org/x/sys/windows"
+import (
+	"log/slog"
+
+	"golang.org/x/sys/windows"
+)
 
 // openURL hands url to the shell, which opens it in the default browser.
-func openURL(url string) error {
+// It returns at once; a failure is logged as a warning.
+func openURL(url string, log *slog.Logger) {
+	go func() {
+		if err := shellExecute(url); err != nil {
+			warnOpen(log, err)
+		}
+	}()
+}
+
+func shellExecute(url string) error {
 	verb, err := windows.UTF16PtrFromString("open")
 	if err != nil {
 		return err

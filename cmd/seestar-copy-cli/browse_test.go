@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/netip"
@@ -164,20 +165,19 @@ func TestBrowseStatuses(t *testing.T) {
 	}
 }
 
-// --open gets the printed URL; a failing opener is a warning and browse
-// keeps serving.
+// --open gets the printed URL and browse's log; a failing opener is a
+// warning and browse keeps serving.
 func TestBrowseOpen(t *testing.T) {
 	statusDevice(t)
 	old := openBrowser
 	t.Cleanup(func() { openBrowser = old })
 	for _, fail := range []bool{false, true} {
 		opened := make(chan string, 1)
-		openBrowser = func(url string) error {
+		openBrowser = func(url string, log *slog.Logger) {
 			opened <- url
 			if fail {
-				return errors.New("no opener")
+				warnOpen(log, errors.New("no opener"))
 			}
-			return nil
 		}
 		b := startBrowse(t, "--open")
 		if got := <-opened; got+"\n" != b.url {
