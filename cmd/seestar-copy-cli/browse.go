@@ -169,14 +169,18 @@ func runBrowse(ctx context.Context, o browseOptions, out io.Writer, log *slog.Lo
 		BaseContext:       func(net.Listener) context.Context { return ctx },
 		ErrorLog:          slog.NewLogLogger(log.Handler(), slog.LevelWarn),
 	}
-	served := make(chan error, 1)
-	go func() { served <- srv.Serve(ln) }()
+	var serveErr error
+	served := make(chan struct{})
+	go func() {
+		serveErr = srv.Serve(ln)
+		close(served)
+	}()
 	err = announce(o, addr, out, log)
 	if err == nil {
 		select {
 		case <-ctx.Done():
-		case err = <-served:
-			err = fmt.Errorf("serve: %w", err)
+		case <-served:
+			err = fmt.Errorf("serve: %w", serveErr)
 		}
 	}
 	// Close the sessions first, which ends any SMB call in flight, so the
@@ -186,6 +190,11 @@ func runBrowse(ctx context.Context, o browseOptions, out io.Writer, log *slog.Lo
 	defer cancel()
 	srv.Shutdown(stop)
 	srv.Close()
+	// Serve may not have started yet, so Shutdown may not have closed the
+	// listener: close it here, and wait for Serve, so the port is free on
+	// return.
+	ln.Close()
+	<-served
 	if err == nil {
 		log.Info("browse stopped")
 	}
