@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/zmerlynn/seestar-copy/internal/readonly"
+	"github.com/zmerlynn/seestar-copy/internal/state"
 )
 
 func TestExcludeMatch(t *testing.T) {
@@ -145,7 +147,7 @@ func localFiles(t *testing.T, dest string) []string {
 // cannot be listed does not fail the pass. Without the defaults that
 // folder is listed and fails the pass.
 func TestSyncSelection(t *testing.T) {
-	selectionDevice(t)
+	dev := selectionDevice(t)
 	dest, stateDir := t.TempDir(), t.TempDir()
 	code, _, stderr := invoke(t, "sync", "--endpoint", "h:445", "--dest", dest, "--state-dir", stateDir, "--once")
 	if code != exitOK {
@@ -177,6 +179,50 @@ func TestSyncSelection(t *testing.T) {
 	}
 	if got := localFiles(t, dest); len(got) != 0 {
 		t.Errorf("a failed listing copied %q", got)
+	}
+
+	// An upgrade from 0.1.0, whose state names only files below its
+	// --source folders. A recorded file since moved out of dest stays done
+	// and one the defaults now exclude keeps its record. Newly covered
+	// files old enough copy, or adopt a matching local file; younger ones
+	// wait, which still exits 0.
+	dest, stateDir = t.TempDir(), t.TempDir()
+	statePath, err := state.Path(stateDir, dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(statePath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	v010 := fmt.Sprintf("{\"v\":1,\"dest\":%q}\n", dest) +
+		`{"path":"MyWorks/exported.fit","size":3,"mtime":"1999-12-31T23:00:00Z","sha256":"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad","at":"1999-12-31T23:30:00Z","how":"copied"}` + "\n" +
+		`{"path":"MyWorks/.hidden.fit","size":3,"mtime":"1999-12-31T23:00:00Z","sha256":"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad","at":"1999-12-31T23:30:00Z","how":"copied"}` + "\n"
+	if err := os.WriteFile(statePath, []byte(v010), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Date(1999, 12, 31, 23, 0, 0, 0, time.UTC)
+	for _, p := range []string{"MyWorks/exported.fit", "MyWorks/.hidden.fit", "Autorun/Light/old.fit", "diag.png"} {
+		dev.set(p, "abc", old)
+	}
+	dev.set("Autorun/Light/five.fit", "abc", time.Now().Add(-5*time.Minute))
+	dev.set("Autorun/Light/one.fit", "abc", time.Now().Add(-time.Minute))
+	place(t, dest, "diag.png", "abc", old)
+	code, _, stderr = invoke(t, "sync", "--endpoint", "h:445", "--dest", dest, "--state-dir", stateDir, "--once")
+	if want := "copied=8 replaced=0 adopted=1 waiting=2 failed=0"; code != exitOK || !strings.Contains(stderr, want) {
+		t.Errorf("upgrade: exit %d, log lacks %q:\n%s", code, want, stderr)
+	}
+	wantFiles := append(slices.Clone(selectionCopied), "Autorun/Light/old.fit")
+	slices.Sort(wantFiles)
+	if got := localFiles(t, dest); !slices.Equal(got, wantFiles) {
+		t.Errorf("upgrade copied %q, want %q", got, wantFiles)
+	}
+	wantRecords := map[string]string{"MyWorks/exported.fit": "copied", "MyWorks/.hidden.fit": "copied", "Autorun/Light/old.fit": "copied"}
+	for _, p := range selectionCopied {
+		wantRecords[p] = "copied"
+	}
+	wantRecords["diag.png"] = "adopted"
+	if got := records(t, stateDir); !maps.Equal(got, wantRecords) {
+		t.Errorf("upgrade records %v, want %v", got, wantRecords)
 	}
 }
 
