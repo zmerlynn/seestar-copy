@@ -100,6 +100,8 @@ func flagError(cmd *cobra.Command, err error) error {
 		switch invalid.GetFlag().Value.Type() {
 		case "duration":
 			rule = "use a duration such as 30s, 5m or 1h"
+		case "age":
+			rule = "use a duration such as 36h, or whole days such as 7d"
 		case "int":
 			rule = "use a whole number"
 		case "bool":
