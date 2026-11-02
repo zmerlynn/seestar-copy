@@ -3,6 +3,7 @@ package browse
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"mime"
 	"mime/multipart"
@@ -11,7 +12,10 @@ import (
 	"time"
 )
 
-const fitURL = "/file?path=MyWorks%2FM%2031%2FX.fit"
+const (
+	fitURL = "/file?path=MyWorks%2FM%2031%2FX.fit"
+	txtURL = "/file?path=MyWorks%2Flog%2FAutorun_Log_1.txt"
+)
 
 func TestFile(t *testing.T) {
 	e := newEnv(t, envOptions{})
@@ -25,6 +29,9 @@ func TestFile(t *testing.T) {
 		{"/file?path=MyWorks%2FM%2031%2FX.jpg&download=1", "image/jpeg", "attachment; filename=X.jpg"},
 		{"/file?download=1&path=MyWorks%2FM%2031%2FX.jpg", "image/jpeg", "attachment; filename=X.jpg"},
 		{"/file?path=MyWorks%2FM%2031%2FX.jpg&download=yes", "image/jpeg", "inline; filename=X.jpg"},
+		{txtURL, "text/plain; charset=utf-8", "inline; filename=Autorun_Log_1.txt"},
+		{txtURL + "&download=1", "text/plain; charset=utf-8", "attachment; filename=Autorun_Log_1.txt"},
+		{"/file?path=MyWorks%2Flog%2Fb.FITS", "application/octet-stream", "attachment; filename=b.FITS"},
 	}
 	for _, tt := range tests {
 		w := e.serve("GET", tt.target)
@@ -39,6 +46,14 @@ func TestFile(t *testing.T) {
 	w := e.serve("GET", fitURL)
 	if !bytes.Equal(w.Body.Bytes(), fitData) || w.Header().Get("Content-Length") != "200" {
 		t.Errorf("full body: %d bytes, Content-Length %q", w.Body.Len(), w.Header().Get("Content-Length"))
+	}
+	if w := e.serve("GET", txtURL); w.Body.String() != logText || w.Header().Get("Content-Security-Policy") != csp+"; sandbox" ||
+		w.Header().Get("X-Content-Type-Options") != "nosniff" || w.Header().Get("Cache-Control") != "no-store" {
+		t.Errorf("text file: %q, headers %v", w.Body, w.Header())
+	}
+	if w := e.serve("GET", txtURL, "Range", "bytes=0-1048575"); w.Code != http.StatusPartialContent || w.Body.String() != logText ||
+		w.Header().Get("Content-Range") != fmt.Sprintf("bytes 0-%d/%d", len(logText)-1, len(logText)) {
+		t.Errorf("text file's first MiB = %d %q, Content-Range %q", w.Code, w.Body, w.Header().Get("Content-Range"))
 	}
 	ranges := []struct {
 		header string

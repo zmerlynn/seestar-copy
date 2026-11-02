@@ -39,6 +39,21 @@ func TestThumbs(t *testing.T) {
 	}
 }
 
+func TestViewKind(t *testing.T) {
+	tests := []struct{ name, want string }{
+		{"a.jpg", "image"}, {"a.JPG", "image"}, {"a.Jpg", "image"},
+		{"a.txt", "text"}, {"a.TXT", "text"}, {"Autorun_Log_2026.txt", "text"},
+		{"a.fit", "fits"}, {"a.FIT", "fits"}, {"a.fits", "fits"}, {"a.FiTs", "fits"},
+		{"a.jpeg", ""}, {"a.text", ""}, {"a.txt.gz", ""}, {"a.fit.jpg", "image"}, {"a.fitz", ""}, {"a.fts", ""},
+		{"a.mp4", ""}, {"a", ""}, {"jpg", ""}, {"txt", ""}, {"fits", ""}, {".txt", "text"},
+	}
+	for _, tt := range tests {
+		if got := viewKind(tt.name); got != tt.want {
+			t.Errorf("viewKind(%q) = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+}
+
 func TestContentTypeAndDisposition(t *testing.T) {
 	for _, name := range []string{"a.jpg", "a.JPG", "a.Jpg"} {
 		if got := contentType(name); got != "image/jpeg" {
@@ -51,7 +66,18 @@ func TestContentTypeAndDisposition(t *testing.T) {
 			t.Errorf("disposition(%q, true) = %q", name, got)
 		}
 	}
-	for _, name := range []string{"a.jpeg", "a.png", "a.svg", "a.html", "a.fit", "a.mp4", "a", "jpg", "a.jpg.fit"} {
+	for _, name := range []string{"a.txt", "a.TXT", "Autorun_Log_1.Txt"} {
+		if got := contentType(name); got != "text/plain; charset=utf-8" {
+			t.Errorf("contentType(%q) = %q", name, got)
+		}
+		if got := disposition(name, false); got != "inline; filename="+name {
+			t.Errorf("disposition(%q, false) = %q", name, got)
+		}
+		if got := disposition(name, true); got != "attachment; filename="+name {
+			t.Errorf("disposition(%q, true) = %q", name, got)
+		}
+	}
+	for _, name := range []string{"a.jpeg", "a.png", "a.svg", "a.html", "a.fit", "a.FITS", "a.mp4", "a.text", "a.txt.gz", "a", "jpg", "txt", "a.jpg.fit"} {
 		if got := contentType(name); got != "application/octet-stream" {
 			t.Errorf("contentType(%q) = %q", name, got)
 		}

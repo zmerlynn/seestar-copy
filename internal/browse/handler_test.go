@@ -28,6 +28,9 @@ var fitData = func() []byte {
 	return b
 }()
 
+// logText is a log file's text, with UTF-8 as the telescope writes it.
+const logText = "Target RA:22h25m4s DEC:-90\u00b00'0\"\n"
+
 func fixture() fstest.MapFS {
 	file := func(data []byte) *fstest.MapFile { return &fstest.MapFile{Data: data, ModTime: t0} }
 	dir := func() *fstest.MapFile { return &fstest.MapFile{Mode: fs.ModeDir | 0o755, ModTime: t0} }
@@ -39,6 +42,9 @@ func fixture() fstest.MapFS {
 		"MyWorks/M 31/X.jpg":                 file([]byte("jpeg")),
 		"MyWorks/M 31/X_thn.jpg":             file([]byte("thn")),
 		"MyWorks/M 31/link":                  {Mode: fs.ModeSymlink, Data: []byte("X.fit"), ModTime: t0},
+		"MyWorks/log":                        dir(),
+		"MyWorks/log/Autorun_Log_1.txt":      file([]byte(logText)),
+		"MyWorks/log/b.FITS":                 file([]byte("SIMPLE")),
 		"MyWorks/odd":                        dir(),
 		"MyWorks/odd/a b#%?&+\"<script>.jpg": file([]byte("x")),
 		"MyWorks/odd/\u00e9.fit":             file([]byte("nfc")),

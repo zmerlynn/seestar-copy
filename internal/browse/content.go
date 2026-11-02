@@ -23,25 +23,41 @@ func hasSuffixFold(name, suffix string) bool {
 	return len(name) >= len(suffix) && strings.EqualFold(name[len(name)-len(suffix):], suffix)
 }
 
-// isJPG reports whether a file may be shown inline: a name ending in .jpg in
-// any case.
-func isJPG(name string) bool { return hasSuffixFold(name, ".jpg") }
+// viewKind is how the page shows a file when clicked, from its name's
+// suffix in any case: "image" for .jpg, "text" for .txt, "fits" for .fit and
+// .fits, and "" for any other file, which is only saved.
+func viewKind(name string) string {
+	switch {
+	case hasSuffixFold(name, ".jpg"):
+		return "image"
+	case hasSuffixFold(name, ".txt"):
+		return "text"
+	case hasSuffixFold(name, ".fit"), hasSuffixFold(name, ".fits"):
+		return "fits"
+	}
+	return ""
+}
 
 // contentType is the fixed type a file is served with. mime.TypeByExtension
 // is not used, since it reads the system's tables.
 func contentType(name string) string {
-	if isJPG(name) {
+	switch viewKind(name) {
+	case "image":
 		return "image/jpeg"
+	case "text":
+		return "text/plain; charset=utf-8"
 	}
 	return "application/octet-stream"
 }
 
 // disposition is the Content-Disposition of a file response: inline only for
-// a .jpg that is not being saved. FormatMediaType quotes the name, or
-// encodes it per RFC 2231, so no name can break the header.
+// a .jpg or .txt that is not being saved. A FITS file stays an attachment:
+// the page reads its header with fetch, which ignores the disposition.
+// FormatMediaType quotes the name, or encodes it per RFC 2231, so no name can
+// break the header.
 func disposition(name string, download bool) string {
 	kind := "attachment"
-	if isJPG(name) && !download {
+	if v := viewKind(name); (v == "image" || v == "text") && !download {
 		kind = "inline"
 	}
 	if v := mime.FormatMediaType(kind, map[string]string{"filename": name}); v != "" {

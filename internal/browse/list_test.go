@@ -25,21 +25,24 @@ func TestList(t *testing.T) {
 		{false, "?path=", `{"path":"","endpoint":"127.0.0.1:4445","statuses":false,"entries":[` +
 			`{"path":"MyWorks","type":"dir",` + mt + `}]}`},
 		{false, "?path=MyWorks%2FM%2031", `{"path":"MyWorks/M 31","endpoint":"127.0.0.1:4445","statuses":false,"entries":[` +
-			`{"path":"MyWorks/M 31/X.fit","type":"file","size":200,` + mt + `,"thumb":"MyWorks/M 31/X_thn.jpg"},` +
-			`{"path":"MyWorks/M 31/X.jpg","type":"file","size":4,` + mt + `,"thumb":"MyWorks/M 31/X_thn.jpg","view":true},` +
-			`{"path":"MyWorks/M 31/X_thn.jpg","type":"file","size":3,` + mt + `,"thumb":"MyWorks/M 31/X_thn.jpg","view":true},` +
+			`{"path":"MyWorks/M 31/X.fit","type":"file","size":200,` + mt + `,"thumb":"MyWorks/M 31/X_thn.jpg","view":"fits"},` +
+			`{"path":"MyWorks/M 31/X.jpg","type":"file","size":4,` + mt + `,"thumb":"MyWorks/M 31/X_thn.jpg","view":"image"},` +
+			`{"path":"MyWorks/M 31/X_thn.jpg","type":"file","size":3,` + mt + `,"thumb":"MyWorks/M 31/X_thn.jpg","view":"image"},` +
 			`{"path":"MyWorks/M 31/sub","type":"dir",` + mt + `}]}`},
 		{true, "?path=MyWorks%2FM%2031", `{"path":"MyWorks/M 31","endpoint":"127.0.0.1:4445","statuses":true,"entries":[` +
-			`{"path":"MyWorks/M 31/X.fit","type":"file","size":200,` + mt + `,"status":"copied","thumb":"MyWorks/M 31/X_thn.jpg"},` +
-			`{"path":"MyWorks/M 31/X.jpg","type":"file","size":4,` + mt + `,"status":"changed","thumb":"MyWorks/M 31/X_thn.jpg","view":true},` +
-			`{"path":"MyWorks/M 31/X_thn.jpg","type":"file","size":3,` + mt + `,"status":"new","thumb":"MyWorks/M 31/X_thn.jpg","view":true},` +
+			`{"path":"MyWorks/M 31/X.fit","type":"file","size":200,` + mt + `,"status":"copied","thumb":"MyWorks/M 31/X_thn.jpg","view":"fits"},` +
+			`{"path":"MyWorks/M 31/X.jpg","type":"file","size":4,` + mt + `,"status":"changed","thumb":"MyWorks/M 31/X_thn.jpg","view":"image"},` +
+			`{"path":"MyWorks/M 31/X_thn.jpg","type":"file","size":3,` + mt + `,"status":"new","thumb":"MyWorks/M 31/X_thn.jpg","view":"image"},` +
 			`{"path":"MyWorks/M 31/sub","type":"dir",` + mt + `}]}`},
 		{true, "?path=MyWorks%2Fodd", `{"path":"MyWorks/odd","endpoint":"127.0.0.1:4445","statuses":true,"entries":[` +
 			`{"path":"MyWorks/odd/%2e%2e","type":"file","size":4,` + mt + `,"status":"new"},` +
 			`{"path":"MyWorks/odd/a b#%?\u0026+\"\u003cscript\u003e.jpg","type":"file","size":1,` + mt +
-			`,"status":"new","thumb":"MyWorks/odd/a b#%?\u0026+\"\u003cscript\u003e.jpg","view":true},` +
-			"{\"path\":\"MyWorks/odd/e\u0301.fit\",\"type\":\"file\",\"size\":3," + mt + `,"status":"new"},` +
-			"{\"path\":\"MyWorks/odd/\u00e9.fit\",\"type\":\"file\",\"size\":3," + mt + `,"status":"new"}]}`},
+			`,"status":"new","thumb":"MyWorks/odd/a b#%?\u0026+\"\u003cscript\u003e.jpg","view":"image"},` +
+			"{\"path\":\"MyWorks/odd/e\u0301.fit\",\"type\":\"file\",\"size\":3," + mt + `,"status":"new","view":"fits"},` +
+			"{\"path\":\"MyWorks/odd/\u00e9.fit\",\"type\":\"file\",\"size\":3," + mt + `,"status":"new","view":"fits"}]}`},
+		{false, "?path=MyWorks%2Flog", `{"path":"MyWorks/log","endpoint":"127.0.0.1:4445","statuses":false,"entries":[` +
+			`{"path":"MyWorks/log/Autorun_Log_1.txt","type":"file","size":33,` + mt + `,"view":"text"},` +
+			`{"path":"MyWorks/log/b.FITS","type":"file","size":6,` + mt + `,"view":"fits"}]}`},
 		{true, "?path=MyWorks%2FM%2031%2Fsub", `{"path":"MyWorks/M 31/sub","endpoint":"127.0.0.1:4445","statuses":true,"entries":[]}`},
 	}
 	for _, tt := range tests {

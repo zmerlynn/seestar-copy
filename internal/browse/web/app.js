@@ -7,9 +7,15 @@ const rows = table.tBodies[0];
 const crumbs = $('crumbs');
 const viewer = $('viewer');
 const viewed = viewer.querySelector('img');
+const viewedText = $('vtext');
+const viewNote = $('vnote');
+
+const textLimit = 1 << 20; // the bytes of a .txt shown
+const fitsLimit = 10 * 2880; // ten FITS header blocks
 
 let generation = 0;
 let loading = null;
+let viewing = null; // the AbortController of the text being read
 
 const pageURL = (p) => (p ? '/?path=' + encodeURIComponent(p) : '/');
 const fileURL = (p, save) => '/file?path=' + encodeURIComponent(p) + (save ? '&download=1' : '');
@@ -53,10 +59,62 @@ function showCrumbs(p) {
   parts.forEach((part, i) => crumbs.append(' / ', folderLink(parts.slice(0, i + 1).join('/'), part)));
 }
 
-function view(p, name) {
-  viewed.src = fileURL(p);
+// fitsCards splits the start of a FITS file, one character per byte, into
+// its 80-character header cards up to and including END, dropping blank ones.
+// end tells whether END was found.
+function fitsCards(text) {
+  const cards = [];
+  for (let i = 0; i + 80 <= text.length; i += 80) {
+    const card = text.slice(i, i + 80).trimEnd();
+    if (card) cards.push(card);
+    if (card === 'END') return { cards, end: true };
+  }
+  return { cards, end: false };
+}
+
+// showText reads the start of a file, up to limit bytes, and shows it as
+// text: a .txt as UTF-8, a FITS file as its header cards.
+async function showText(e, kind, signal) {
+  const limit = kind === 'fits' ? fitsLimit : textLimit;
+  viewNote.textContent = 'Loading…';
+  try {
+    // An empty file has no range to ask for.
+    const headers = e.size > 0 ? { Range: 'bytes=0-' + (limit - 1) } : {};
+    const res = await fetch(fileURL(e.path), { headers, signal });
+    if (res.status !== 200 && res.status !== 206) {
+      throw new Error((await res.text()).trim() || 'HTTP ' + res.status);
+    }
+    const all = new Uint8Array(await res.arrayBuffer());
+    const bytes = all.subarray(0, limit);
+    const total = Number((res.headers.get('Content-Range') || '').split('/')[1]) || all.length;
+    if (kind === 'fits') {
+      // latin1 decodes one byte to one character, so cards stay 80 bytes.
+      const { cards, end } = fitsCards(new TextDecoder('latin1').decode(bytes));
+      viewedText.textContent = cards.join('\n');
+      viewNote.textContent = end ? '' : 'No END card in the first ' + bytes.length + ' bytes; showing what was read.';
+    } else {
+      const more = total > limit;
+      // stream leaves out a character cut in two at the limit.
+      viewedText.textContent = new TextDecoder().decode(bytes, { stream: more });
+      viewNote.textContent = more ? 'First 1 MiB shown; save to see all.' : '';
+    }
+  } catch (err) {
+    if (signal.aborted) return;
+    viewNote.textContent = 'Could not read this file: ' + err.message;
+  }
+}
+
+function view(e, name) {
+  if (viewing) viewing.abort();
+  viewing = new AbortController();
   $('vname').textContent = name;
-  $('vsave').href = fileURL(p, true);
+  $('vsave').href = fileURL(e.path, true);
+  viewed.hidden = e.view !== 'image';
+  viewedText.hidden = e.view === 'image';
+  viewedText.textContent = '';
+  viewNote.textContent = '';
+  if (e.view === 'image') viewed.src = fileURL(e.path);
+  else showText(e, e.view, viewing.signal);
   viewer.showModal();
 }
 
@@ -82,7 +140,7 @@ function row(e) {
     a.addEventListener('click', (ev) => {
       if (!plainClick(ev)) return;
       ev.preventDefault();
-      view(e.path, name);
+      view(e, name);
     });
     nameCell.append(a);
   } else {
@@ -144,6 +202,10 @@ async function load(p) {
 const current = () => new URLSearchParams(location.search).get('path') || '';
 
 $('vclose').addEventListener('click', () => viewer.close());
-viewer.addEventListener('close', () => viewed.removeAttribute('src'));
+viewer.addEventListener('close', () => {
+  if (viewing) viewing.abort();
+  viewed.removeAttribute('src');
+  viewedText.textContent = '';
+});
 window.addEventListener('popstate', () => load(current()));
 load(current());

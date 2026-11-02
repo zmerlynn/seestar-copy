@@ -1,3 +1,4 @@
+[hidden] { display: none !important; }
 body { font: 14px/1.4 system-ui, sans-serif; margin: 0 1rem 2rem; color: #1b1b1b; background: #fff; }
 header { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: baseline; padding: 0.75rem 0; border-bottom: 1px solid #ddd; }
 h1 { font-size: 1.1rem; margin: 0; }
@@ -19,6 +20,8 @@ table:not(.statuses) .st { display: none; }
 .hide { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 dialog { max-width: 95vw; max-height: 95vh; padding: 0.5rem; }
 dialog img { display: block; max-width: calc(95vw - 2rem); max-height: calc(95vh - 5rem); margin: auto; }
+dialog pre { max-width: calc(95vw - 2rem); max-height: calc(95vh - 6rem); overflow: auto; margin: 0; font-family: ui-monospace, monospace; }
+#vnote:empty { display: none; }
 dialog p { margin: 0.5rem 0 0; display: flex; gap: 1rem; align-items: center; }
 #vname { flex: 1; overflow-wrap: anywhere; }
 @media (prefers-color-scheme: dark) {

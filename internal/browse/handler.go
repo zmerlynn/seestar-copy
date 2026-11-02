@@ -152,7 +152,7 @@ type item struct {
 	MTime  string `json:"mtime"`
 	Status string `json:"status,omitempty"`
 	Thumb  string `json:"thumb,omitempty"`
-	View   bool   `json:"view,omitempty"`
+	View   string `json:"view,omitempty"` // the page's viewer: viewKind
 }
 
 func (h *handler) list(w http.ResponseWriter, r *http.Request, shown, dir string) {
@@ -195,7 +195,7 @@ func (h *handler) list(w http.ResponseWriter, r *http.Request, shown, dir string
 			it.Type = "dir"
 		case remote.Regular:
 			name := path.Base(e.Path)
-			it.Type, it.Size, it.View = "file", &e.Size, isJPG(name)
+			it.Type, it.Size, it.View = "file", &e.Size, viewKind(name)
 			if th := t.For(name); th != "" {
 				it.Thumb = path.Join(path.Dir(e.Path), th)
 			}
