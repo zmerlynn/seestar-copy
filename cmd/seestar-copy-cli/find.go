@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/spf13/cobra"
+	"github.com/zmerlynn/seestar-copy/internal/plan"
 	"github.com/zmerlynn/seestar-copy/internal/readonly"
 	"github.com/zmerlynn/seestar-copy/internal/remote"
 	"github.com/zmerlynn/seestar-copy/internal/state"
@@ -192,7 +193,7 @@ func list(ctx context.Context, o findOptions, records map[string]state.Record, o
 			l.Type = "dir"
 			folders++
 		case remote.Regular:
-			if !olderThan(now, e.ModTime, o.olderThan) {
+			if !plan.OldEnough(now, e.ModTime, o.olderThan) {
 				recent++
 				continue
 			}

@@ -39,25 +39,3 @@ func TestAgeValue(t *testing.T) {
 		}
 	}
 }
-
-func TestOlderThan(t *testing.T) {
-	now := time.Date(2026, 11, 9, 9, 0, 0, 0, time.UTC)
-	week := 7 * 24 * time.Hour
-	for _, tc := range []struct {
-		mtime time.Time
-		limit time.Duration
-		want  bool
-	}{
-		{now.Add(-week), week, true},
-		{now.Add(-week + time.Nanosecond), week, false},
-		{now.Add(-week - time.Nanosecond), week, true},
-		{now.Add(time.Hour), week, false},
-		{now.Add(time.Hour), 0, true},
-		{now, 0, true},
-		{now, time.Nanosecond, false},
-	} {
-		if got := olderThan(now, tc.mtime, tc.limit); got != tc.want {
-			t.Errorf("olderThan(now, %v, %v) = %v, want %v", tc.mtime, tc.limit, got, tc.want)
-		}
-	}
-}
