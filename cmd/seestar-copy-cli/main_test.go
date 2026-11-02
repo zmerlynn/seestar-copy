@@ -35,7 +35,7 @@ func TestHelp(t *testing.T) {
 		if code != exitOK || stderr != "" {
 			t.Errorf("%q: code=%d stderr=%q, want 0 and no stderr", args, code, stderr)
 		}
-		for _, want := range []string{"Usage:\n  seestar-copy-cli [flags]\n", "  sync ", "  licenses ", "--version"} {
+		for _, want := range []string{"Usage:\n  seestar-copy-cli [flags]\n", "  sync ", "  find ", "  licenses ", "--version"} {
 			if !strings.Contains(stdout, want) {
 				t.Errorf("%q: help lacks %q:\n%s", args, want, stdout)
 			}
