@@ -899,8 +899,8 @@ whatever its name, is sent as a download, never shown. Save links save the
 file under its name on the share, through the browser's own download.
 
 Each listing reads the folder from the telescope again, and with `--dest`
-reads the state again, so the statuses follow a sync running at the same
-time. Browse takes no [lock](#lock). A file still being written can be shown
+reads the state again whenever the state file's size or modification time
+has changed, so the statuses follow a sync running at the same time. Browse takes no [lock](#lock). A file still being written can be shown
 or saved torn; open it again once it has stopped changing.
 
 A failed request never stops browse. A telescope that cannot be reached, a

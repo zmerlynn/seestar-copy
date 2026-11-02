@@ -125,7 +125,8 @@ func TestBrowseRun(t *testing.T) {
 	}
 }
 
-// With --dest, the state is read at start and on each listing.
+// With --dest, the state is read at start, and a listing reads it again
+// once the state file has changed.
 func TestBrowseStatuses(t *testing.T) {
 	statusDevice(t)
 	dest, stateDir := filepath.Join(t.TempDir(), "dest"), filepath.Join(t.TempDir(), "state")
@@ -137,6 +138,26 @@ func TestBrowseStatuses(t *testing.T) {
 		if code != 200 || !strings.Contains(body, want) {
 			t.Errorf("listing = %d, lacks %s:\n%s", code, want, body)
 		}
+	}
+	p, err := state.Path(stateDir, dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.OpenFile(p, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = f.WriteString(`{"path":"MyWorks/d.fit","size":3,"mtime":"2026-11-01T05:04:05.1234567Z","sha256":"` +
+		strings.Repeat("0", 64) + `","at":"2026-11-01T07:00:00Z","how":"copied"}` + "\n")
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, body = b.get(t, "api/list?path=MyWorks")
+	if want := `"path":"MyWorks/d.fit","type":"file","size":3,"mtime":"2026-11-01T05:04:05.1234567Z","status":"copied"`; code != 200 || !strings.Contains(body, want) {
+		t.Errorf("listing after an append = %d, lacks %s:\n%s", code, want, body)
 	}
 	if code, stderr := b.end(), b.stderr.next(); code != exitOK || !strings.Contains(stderr, " dest="+dest) {
 		t.Errorf("exit %d\n%s", code, stderr)

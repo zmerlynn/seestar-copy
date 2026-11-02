@@ -141,7 +141,11 @@ func runBrowse(ctx context.Context, o browseOptions, out io.Writer, log *slog.Lo
 		if _, err := state.Load(stateDir, o.dest, log); err != nil {
 			return err
 		}
-		records = func() (map[string]state.Record, error) { return state.Load(stateDir, o.dest, log) }
+		file, err := state.Path(stateDir, o.dest)
+		if err != nil {
+			return err
+		}
+		records = browse.CacheRecords(file, func() (map[string]state.Record, error) { return state.Load(stateDir, o.dest, log) })
 	}
 	ln, err := net.Listen("tcp", o.addr.String())
 	if err != nil {
