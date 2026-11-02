@@ -50,7 +50,11 @@ func NewHandler(cfg Config) http.Handler { return &handler{cfg: cfg} }
 
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	hd := w.Header()
-	hd.Set("Content-Security-Policy", csp)
+	policy := csp
+	if r.URL.Path == "/file" {
+		policy += "; sandbox"
+	}
+	hd.Set("Content-Security-Policy", policy)
 	hd.Set("Cross-Origin-Resource-Policy", "same-origin")
 	hd.Set("X-Frame-Options", "DENY")
 	hd.Set("Referrer-Policy", "no-referrer")
@@ -67,7 +71,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	asset, isStatic := static[r.URL.Path]
-	if !isStatic && r.URL.Path != "/api/list" {
+	if !isStatic && r.URL.Path != "/api/list" && r.URL.Path != "/file" {
 		http.Error(w, "Not found", http.StatusNotFound)
 		return
 	}
@@ -85,6 +89,11 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Write(b)
 		return
 	}
+	list := r.URL.Path == "/api/list"
+	fail := h.fileError
+	if list {
+		fail = h.listError
+	}
 	q, err := url.ParseQuery(r.URL.RawQuery)
 	if err == nil {
 		for _, v := range q {
@@ -94,20 +103,24 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err != nil {
-		h.listError(w, http.StatusBadRequest, "bad_query", "The request's query is malformed.")
+		fail(w, http.StatusBadRequest, "bad_query", "The request's query is malformed.")
 		return
 	}
 	p := q.Get("path")
-	root := p == "" // the share root
+	root := list && p == "" // the share root, which only a listing names
 	if !utf8.ValidString(p) || !(root || remote.ValidPath(p)) {
-		h.listError(w, http.StatusBadRequest, "bad_path", "The path is not a valid share path.")
+		fail(w, http.StatusBadRequest, "bad_path", "The path is not a valid share path.")
 		return
 	}
-	dir := p
-	if root {
-		dir = "."
+	if list {
+		dir := p
+		if root {
+			dir = "."
+		}
+		h.list(w, r, p, dir)
+	} else {
+		h.file(w, r, p, q.Get("download") == "1")
 	}
-	h.list(w, r, p, dir)
 }
 
 // hostAllowed is the Host check. A Host without a port means port 80. For a
@@ -205,6 +218,44 @@ func (h *handler) list(w http.ResponseWriter, r *http.Request, shown, dir string
 	w.Write(b)
 }
 
+func (h *handler) file(w http.ResponseWriter, r *http.Request, p string, download bool) {
+	lease, err := h.cfg.Sessions.Get(r.Context())
+	if err != nil {
+		h.deviceError(w, r, p, err, h.fileError)
+		return
+	}
+	defer lease.Release()
+	f, err := lease.Session().Open(lease.Context(), p)
+	if err != nil {
+		lease.Fail(err)
+		h.deviceError(w, r, p, err, h.fileError)
+		return
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		lease.Fail(err)
+		h.deviceError(w, r, p, err, h.fileError)
+		return
+	}
+	if info.IsDir() {
+		h.fileError(w, http.StatusBadRequest, "not_a_file", "The path is a folder.")
+		return
+	}
+	var failed error
+	rs := newFileReader(r.Context(), f, info.Size(), func(err error) {
+		failed = err
+		lease.Fail(err)
+	})
+	name := path.Base(p)
+	w.Header().Set("Content-Type", contentType(name))
+	w.Header().Set("Content-Disposition", disposition(name, download))
+	http.ServeContent(w, r, "", info.ModTime(), rs)
+	if failed != nil && r.Context().Err() == nil {
+		h.cfg.Log.Warn("request failed", "path", p, "error", failed)
+	}
+}
+
 // deviceError answers a failed Get or SMB call: 404 for a missing path, 400
 // for a path of the wrong kind, and 502 for anything else, which is logged
 // unless the client has gone away.
@@ -232,4 +283,9 @@ func (h *handler) listError(w http.ResponseWriter, status int, code, message str
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	w.Write(b)
+}
+
+// fileError answers a /file request with plain text.
+func (h *handler) fileError(w http.ResponseWriter, status int, _, message string) {
+	http.Error(w, message, status)
 }

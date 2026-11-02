@@ -106,7 +106,7 @@ func (e *env) serve(method, target string, headers ...string) *httptest.Response
 }
 
 // routes is one request to every route.
-var routes = []string{"/", "/app.js", "/style.css", "/api/list?path=MyWorks"}
+var routes = []string{"/", "/app.js", "/style.css", "/api/list?path=MyWorks", "/file?path=MyWorks%2FM%2031%2FX.jpg"}
 
 func TestHostCheck(t *testing.T) {
 	tests := []struct {
@@ -239,18 +239,25 @@ func TestBadQueries(t *testing.T) {
 		{"path=..", "bad_path"},
 		{"path=MyWorks%5CM%2031", "bad_path"},
 	}
-	for _, tt := range tests {
-		w := e.serve("GET", "/api/list?"+tt.query)
-		if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), tt.code) {
-			t.Errorf("/api/list?%s = %d %q, want 400 %s", tt.query, w.Code, w.Body, tt.code)
+	for _, route := range []string{"/api/list", "/file"} {
+		for _, tt := range tests {
+			w := e.serve("GET", route+"?"+tt.query)
+			if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), tt.code) && route == "/api/list" {
+				t.Errorf("%s?%s = %d %q, want 400 %s", route, tt.query, w.Code, w.Body, tt.code)
+			}
+		}
+		// An empty path is the root for a listing, never a file.
+		if w := e.serve("GET", route+"?path="); (route == "/file") != (w.Code == http.StatusBadRequest) {
+			t.Errorf("%s?path= = %d", route, w.Code)
 		}
 	}
-	// An empty path is the root.
-	if w := e.serve("GET", "/api/list?path="); w.Code != http.StatusOK {
-		t.Errorf("/api/list?path= = %d", w.Code)
+	if s.n("ReadDir") != 2 || s.n("Open") != 0 || e.d.dials() != 1 {
+		t.Errorf("bad queries reached the device: %d listings (want 2), %d opens, %d dials", s.n("ReadDir"), s.n("Open"), e.d.dials())
 	}
-	if s.n("ReadDir") != 2 || e.d.dials() != 1 {
-		t.Errorf("bad queries reached the device: %d listings (want 2), %d dials", s.n("ReadDir"), e.d.dials())
+	// A literal %2e%2e is a name, decoded once and never cleaned.
+	w := e.serve("GET", "/file?path=MyWorks%2Fodd%2F%252e%252e")
+	if w.Code != http.StatusOK || w.Body.String() != "dots" || s.n("Open:MyWorks/odd/%2e%2e") != 1 {
+		t.Errorf("literal %%2e%%2e = %d %q", w.Code, w.Body)
 	}
 }
 
@@ -269,15 +276,25 @@ func TestHeaders(t *testing.T) {
 		{ok, "GET", "/app.js", nil, 200},
 		{ok, "GET", "/style.css", nil, 200},
 		{ok, "GET", "/api/list?path=MyWorks", nil, 200},
+		{ok, "GET", "/file?path=MyWorks%2FM%2031%2FX.jpg", nil, 200},
+		{ok, "HEAD", "/file?path=MyWorks%2FM%2031%2FX.jpg", nil, 200},
+		{ok, "GET", "/file?path=MyWorks%2FM%2031%2FX.fit", []string{"Range", "bytes=0-9"}, 206},
+		{ok, "GET", "/file?path=MyWorks%2FM%2031%2FX.fit", []string{"If-Modified-Since", t0.Format(http.TimeFormat)}, 304},
+		{ok, "GET", "/file?path=MyWorks%2FM%2031%2FX.fit", []string{"Range", "bytes=500-"}, 416},
 		{ok, "GET", "/", []string{"Host", "evil.example:53817"}, 403},
+		{ok, "GET", "/file?path=x", []string{"Host", "evil.example:53817"}, 403},
 		{ok, "GET", "/api/list", []string{"Sec-Fetch-Site", "cross-site"}, 403},
-		{ok, "POST", "/api/list", nil, 405},
+		{ok, "POST", "/file?path=x", nil, 405},
 		{ok, "GET", "/nowhere", nil, 404},
 		{ok, "GET", "/api/list?path=%ZZ", nil, 400},
+		{ok, "GET", "/file?path=%ZZ", nil, 400},
 		{ok, "GET", "/api/list?path=MyWorks%2FM%2031%2FX.fit", nil, 400},
+		{ok, "GET", "/file?path=MyWorks", nil, 400},
 		{ok, "GET", "/api/list?path=nothing", nil, 404},
+		{ok, "GET", "/file?path=nothing", nil, 404},
 		{badState, "GET", "/api/list", nil, 500},
 		{noDevice, "GET", "/api/list", nil, 502},
+		{noDevice, "GET", "/file?path=x", nil, 502},
 	}
 	for _, tt := range tests {
 		w := tt.e.serve(tt.method, tt.target, tt.header...)
@@ -291,6 +308,14 @@ func TestHeaders(t *testing.T) {
 			"Referrer-Policy":              "no-referrer",
 			"X-Content-Type-Options":       "nosniff",
 			"Cache-Control":                "no-store",
+		}
+		if strings.HasPrefix(tt.target, "/file") {
+			want["Content-Security-Policy"] = csp + "; sandbox"
+		}
+		if tt.code == http.StatusRequestedRangeNotSatisfiable {
+			// http.ServeContent's own error answers drop Cache-Control;
+			// a 416 or 500 is never cached by default anyway.
+			delete(want, "Cache-Control")
 		}
 		for k, v := range want {
 			if got := w.Header().Values(k); len(got) != 1 || got[0] != v {

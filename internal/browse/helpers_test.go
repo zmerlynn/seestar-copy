@@ -50,12 +50,13 @@ func newLog() (*slog.Logger, *logBuffer) {
 	return slog.New(slog.NewTextHandler(&b, nil)), &b
 }
 
-// spy is a Session over a Fake that counts its calls.
+// spy is a Session over a Fake that counts every call.
 type spy struct {
-	*remote.Fake
-	ctx  context.Context // the dial's
-	done chan struct{}
-	once sync.Once
+	fake      *remote.Fake
+	ctx       context.Context                      // the dial's
+	seekFault func(offset int64, whence int) error // if not nil, each file Seek's error
+	done      chan struct{}
+	once      sync.Once
 
 	mu    sync.Mutex
 	calls map[string]int
@@ -83,15 +84,55 @@ func (s *spy) closed() bool {
 	}
 }
 
+func (s *spy) Walk(ctx context.Context, skip func(string, bool) bool) ([]remote.Entry, error) {
+	s.count("Walk")
+	return s.fake.Walk(ctx, skip)
+}
+
 func (s *spy) ReadDir(ctx context.Context, dir string) ([]remote.Entry, error) {
 	s.count("ReadDir")
-	return s.Fake.ReadDir(ctx, dir)
+	return s.fake.ReadDir(ctx, dir)
+}
+
+func (s *spy) Open(ctx context.Context, p string) (remote.File, error) {
+	s.count("Open:" + p)
+	s.count("Open")
+	f, err := s.fake.Open(ctx, p)
+	if err != nil {
+		return nil, err
+	}
+	return &spyFile{File: f, s: s}, nil
 }
 
 func (s *spy) Close() error {
 	s.count("Close")
 	s.once.Do(func() { close(s.done) })
-	return s.Fake.Close()
+	return s.fake.Close()
+}
+
+type spyFile struct {
+	remote.File
+	s *spy
+}
+
+func (f *spyFile) Read(p []byte) (int, error) {
+	f.s.count("Read")
+	return f.File.Read(p)
+}
+
+func (f *spyFile) Seek(offset int64, whence int) (int64, error) {
+	f.s.count("Seek")
+	if f.s.seekFault != nil {
+		if err := f.s.seekFault(offset, whence); err != nil {
+			return 0, err
+		}
+	}
+	return f.File.Seek(offset, whence)
+}
+
+func (f *spyFile) Close() error {
+	f.s.count("FileClose")
+	return f.File.Close()
 }
 
 // dialer makes a new spy over fsys for each dial and counts them. With gate
@@ -109,7 +150,7 @@ type dialer struct {
 
 func (d *dialer) dial(ctx context.Context) (remote.Session, error) {
 	d.mu.Lock()
-	s := &spy{Fake: remote.NewFake(d.fsys), ctx: ctx, done: make(chan struct{}), calls: map[string]int{}}
+	s := &spy{fake: remote.NewFake(d.fsys), ctx: ctx, done: make(chan struct{}), calls: map[string]int{}}
 	if d.setup != nil {
 		d.setup(s)
 	}
