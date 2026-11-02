@@ -172,8 +172,8 @@ check against the previous listing still makes them wait.
 ### A failed pass
 
 If the connection or the listing of a source fails, the pass fails: nothing is
-copied, the error is logged in the `pass failed` line, and the next pass is
-tried after `--interval`. With `--once`, sync exits 1 instead.
+copied, and the error is logged. With `--once` or `--dry-run`, sync exits 1;
+otherwise it tries another pass after `--interval`.
 
 A file that fails is logged and left for the next pass; the other files go on.
 There is one attempt per file per pass, and no retry loop within a pass.
@@ -326,7 +326,7 @@ and `registry.lock` in the same folder, stay on disk; that is expected.
 ## Stopping
 
 Sync runs until it receives Ctrl+C (SIGINT) or SIGTERM, or until the pass of
-`--once` ends. On a signal:
+`--once` or `--dry-run` ends. On a signal:
 
 - reads in progress stop, and their temporary files are removed;
 - files not yet started are not started;
@@ -409,14 +409,14 @@ Flag values are never echoed in it.
 | 1 | A runtime failure: the destination or state could not be opened or locked, leftover temporary files could not be removed, a `--once` or `--dry-run` pass failed (`connect to ...` or `list ...`), a `--once` or `--dry-run` pass had failed files (`failed files: N`), or output could not be written. |
 | 2 | A usage error: an unknown or invalid flag, a missing `--endpoint` or `--dest`, `--dry-run` with `--interval`, or a positional argument. |
 
-Without `--once`, failed passes and failed files do not end sync: it logs
-them and tries again on the next pass.
+Without `--once` or `--dry-run`, failed passes and failed files do not end
+sync: it logs them and tries again on the next pass.
 
 ## Names that fail
 
 Sync never renames a file. A name it cannot store fails with a `file failed`
 line naming the rule, on every pass, and the other files go on. With `--once`
-such a file makes the exit code 1. To leave it out, choose `--source` folders
+or `--dry-run` such a file makes the exit code 1. To leave it out, choose `--source` folders
 that don't contain it.
 
 ### On every platform

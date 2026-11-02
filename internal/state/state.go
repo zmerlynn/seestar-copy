@@ -333,8 +333,9 @@ func syncDir(dir string) error {
 // Load reads the records of dest's state for a dry run, and changes nothing on
 // disk. It creates no folder or file, takes no lock and repairs nothing: a
 // torn final line is left in place, logged at warn level, and its record
-// ignored, as [Open] would drop it. A missing state directory, state file or
-// destination, or an empty state file, gives no records. Like Open, Load
+// ignored, as [Open] would drop it. A missing state directory or state file,
+// or an empty state file, gives no records. A missing destination is left
+// absent; its existing state records are still loaded. Like Open, Load
 // refuses a state directory inside dest and, when the sync directory exists,
 // another spelling of a destination that already has a state file; it
 // refuses a state file it cannot parse for the same reasons Open does.
