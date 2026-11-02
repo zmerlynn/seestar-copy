@@ -313,8 +313,9 @@ func TestHeaders(t *testing.T) {
 			want["Content-Security-Policy"] = csp + "; sandbox"
 		}
 		if tt.code == http.StatusRequestedRangeNotSatisfiable {
-			// http.ServeContent's own error answers drop Cache-Control;
-			// a 416 or 500 is never cached by default anyway.
+			// http.ServeContent's own 416 and 500 answers drop
+			// Cache-Control. That is accepted: they carry no file data, and
+			// 416 and 500 are not heuristically cacheable.
 			delete(want, "Cache-Control")
 		}
 		for k, v := range want {
