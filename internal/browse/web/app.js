@@ -104,6 +104,19 @@ async function showText(e, kind, signal) {
   }
 }
 
+// showImage shows a .jpg, with a note while it loads or if it fails. The
+// listeners go with signal, so a closed or replaced viewer ignores them.
+function showImage(e, name, signal) {
+  viewNote.textContent = 'Loading image…';
+  viewed.alt = 'Image preview of ' + name;
+  viewed.addEventListener('load', () => { viewNote.textContent = ''; }, { signal });
+  viewed.addEventListener('error', () => {
+    viewed.hidden = true;
+    viewNote.textContent = 'Could not load this image. Close this preview and reopen the file to retry.';
+  }, { signal });
+  viewed.src = fileURL(e.path);
+}
+
 function view(e, name) {
   if (viewing) viewing.abort();
   viewing = new AbortController();
@@ -113,7 +126,7 @@ function view(e, name) {
   viewedText.hidden = e.view === 'image';
   viewedText.textContent = '';
   viewNote.textContent = '';
-  if (e.view === 'image') viewed.src = fileURL(e.path);
+  if (e.view === 'image') showImage(e, name, viewing.signal);
   else showText(e, e.view, viewing.signal);
   viewer.showModal();
 }
@@ -157,6 +170,7 @@ function row(e) {
     const a = el('a', 'Save');
     a.href = fileURL(e.path, true);
     a.download = '';
+    a.setAttribute('aria-label', 'Save ' + name);
     save.append(a);
   }
   const tr = el('tr');
@@ -205,6 +219,7 @@ $('vclose').addEventListener('click', () => viewer.close());
 viewer.addEventListener('close', () => {
   if (viewing) viewing.abort();
   viewed.removeAttribute('src');
+  viewed.alt = '';
   viewedText.textContent = '';
 });
 window.addEventListener('popstate', () => load(current()));
