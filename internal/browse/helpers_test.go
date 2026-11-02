@@ -83,6 +83,11 @@ func (s *spy) closed() bool {
 	}
 }
 
+func (s *spy) ReadDir(ctx context.Context, dir string) ([]remote.Entry, error) {
+	s.count("ReadDir")
+	return s.Fake.ReadDir(ctx, dir)
+}
+
 func (s *spy) Close() error {
 	s.count("Close")
 	s.once.Do(func() { close(s.done) })

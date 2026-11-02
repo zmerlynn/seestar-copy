@@ -2,10 +2,19 @@ package browse
 
 import (
 	"embed"
+	"encoding/json"
+	"errors"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"net/netip"
+	"net/url"
+	"path"
+	"time"
+	"unicode/utf8"
 
+	"github.com/zmerlynn/seestar-copy/internal/plan"
+	"github.com/zmerlynn/seestar-copy/internal/remote"
 	"github.com/zmerlynn/seestar-copy/internal/state"
 )
 
@@ -57,8 +66,8 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		reject(http.StatusMethodNotAllowed)
 		return
 	}
-	asset, ok := static[r.URL.Path]
-	if !ok {
+	asset, isStatic := static[r.URL.Path]
+	if !isStatic && r.URL.Path != "/api/list" {
 		http.Error(w, "Not found", http.StatusNotFound)
 		return
 	}
@@ -66,13 +75,39 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		reject(http.StatusForbidden)
 		return
 	}
-	b, err := assets.ReadFile(asset.file)
-	if err != nil {
-		http.Error(w, "Not found", http.StatusNotFound)
+	if isStatic {
+		b, err := assets.ReadFile(asset.file)
+		if err != nil {
+			http.Error(w, "Not found", http.StatusNotFound)
+			return
+		}
+		hd.Set("Content-Type", asset.typ)
+		w.Write(b)
 		return
 	}
-	hd.Set("Content-Type", asset.typ)
-	w.Write(b)
+	q, err := url.ParseQuery(r.URL.RawQuery)
+	if err == nil {
+		for _, v := range q {
+			if len(v) > 1 {
+				err = errors.New("repeated parameter")
+			}
+		}
+	}
+	if err != nil {
+		h.listError(w, http.StatusBadRequest, "bad_query", "The request's query is malformed.")
+		return
+	}
+	p := q.Get("path")
+	root := p == "" // the share root
+	if !utf8.ValidString(p) || !(root || remote.ValidPath(p)) {
+		h.listError(w, http.StatusBadRequest, "bad_path", "The path is not a valid share path.")
+		return
+	}
+	dir := p
+	if root {
+		dir = "."
+	}
+	h.list(w, r, p, dir)
 }
 
 // hostAllowed is the Host check. A Host without a port means port 80. For a
@@ -87,4 +122,114 @@ func (h *handler) hostAllowed(host string) bool {
 	}
 	ap, err := netip.ParseAddrPort(host)
 	return err == nil && ap.Port() == h.cfg.Addr.Port()
+}
+
+// The JSON of /api/list.
+type listing struct {
+	Path     string `json:"path"`
+	Endpoint string `json:"endpoint"`
+	Statuses bool   `json:"statuses"`
+	Entries  []item `json:"entries"`
+}
+
+type item struct {
+	Path   string `json:"path"`
+	Type   string `json:"type"`
+	Size   *int64 `json:"size,omitempty"`
+	MTime  string `json:"mtime"`
+	Status string `json:"status,omitempty"`
+	Thumb  string `json:"thumb,omitempty"`
+	View   bool   `json:"view,omitempty"`
+}
+
+func (h *handler) list(w http.ResponseWriter, r *http.Request, shown, dir string) {
+	var records map[string]state.Record
+	if h.cfg.Records != nil {
+		var err error
+		if records, err = h.cfg.Records(); err != nil {
+			h.cfg.Log.Warn("request failed", "path", shown, "error", err)
+			h.listError(w, http.StatusInternalServerError, "state", err.Error())
+			return
+		}
+	}
+	lease, err := h.cfg.Sessions.Get(r.Context())
+	if err != nil {
+		h.deviceError(w, r, shown, err, h.listError)
+		return
+	}
+	defer lease.Release()
+	entries, err := lease.Session().ReadDir(lease.Context(), dir)
+	if err != nil {
+		lease.Fail(err)
+		h.deviceError(w, r, shown, err, h.listError)
+		return
+	}
+	if r.Context().Err() != nil {
+		return
+	}
+	var files []string
+	for _, e := range entries {
+		if e.Kind == remote.Regular {
+			files = append(files, path.Base(e.Path))
+		}
+	}
+	t := newThumbs(files)
+	out := listing{Path: shown, Endpoint: h.cfg.Endpoint, Statuses: records != nil, Entries: make([]item, 0, len(entries))}
+	for _, e := range entries {
+		it := item{Path: e.Path, MTime: e.ModTime.UTC().Format(time.RFC3339Nano)}
+		switch e.Kind {
+		case remote.Dir:
+			it.Type = "dir"
+		case remote.Regular:
+			name := path.Base(e.Path)
+			it.Type, it.Size, it.View = "file", &e.Size, isJPG(name)
+			if th := t.For(name); th != "" {
+				it.Thumb = path.Join(path.Dir(e.Path), th)
+			}
+			if records != nil {
+				rec, ok := records[e.Path]
+				it.Status = plan.FileStatus(plan.Entry{Path: e.Path, Size: e.Size, ModTime: e.ModTime, Regular: true},
+					plan.Recorded{Size: rec.Size, ModTime: rec.MTime}, ok)
+			}
+		default:
+			continue
+		}
+		out.Entries = append(out.Entries, it)
+	}
+	b, err := json.Marshal(out)
+	if err != nil {
+		h.listError(w, http.StatusInternalServerError, "encode", err.Error())
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(b)
+}
+
+// deviceError answers a failed Get or SMB call: 404 for a missing path, 400
+// for a path of the wrong kind, and 502 for anything else, which is logged
+// unless the client has gone away.
+func (h *handler) deviceError(w http.ResponseWriter, r *http.Request, p string, err error,
+	fail func(http.ResponseWriter, int, string, string)) {
+	switch {
+	case r.Context().Err() != nil:
+		return
+	case errors.Is(err, fs.ErrNotExist):
+		fail(w, http.StatusNotFound, "not_found", "Not found on the device.")
+	case errors.Is(err, remote.ErrNotDir):
+		fail(w, http.StatusBadRequest, "not_a_folder", "The path is not a folder.")
+	default:
+		h.cfg.Log.Warn("request failed", "path", p, "error", err)
+		fail(w, http.StatusBadGateway, "device", err.Error())
+	}
+}
+
+// listError answers an /api/list request with a JSON error.
+func (h *handler) listError(w http.ResponseWriter, status int, code, message string) {
+	b, _ := json.Marshal(struct {
+		Error   string `json:"error"`
+		Message string `json:"message"`
+	}{code, message})
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	w.Write(b)
 }

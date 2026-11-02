@@ -2,6 +2,7 @@ package browse
 
 import (
 	"context"
+	"errors"
 	"io/fs"
 	"maps"
 	"net/http"
@@ -105,7 +106,7 @@ func (e *env) serve(method, target string, headers ...string) *httptest.Response
 }
 
 // routes is one request to every route.
-var routes = []string{"/", "/app.js", "/style.css"}
+var routes = []string{"/", "/app.js", "/style.css", "/api/list?path=MyWorks"}
 
 func TestHostCheck(t *testing.T) {
 	tests := []struct {
@@ -157,7 +158,7 @@ func TestHostCheck(t *testing.T) {
 			t.Errorf("listening on %s: refused hosts made %d dials and %d state loads", tt.addr, e.d.dials(), e.loads.Load())
 		}
 		for _, host := range tt.allow {
-			if w := e.serve("GET", "/", "Host", host); w.Code != http.StatusOK {
+			if w := e.serve("GET", "/api/list?path=MyWorks", "Host", host); w.Code != http.StatusOK {
 				t.Errorf("listening on %s: Host %q = %d, want 200", tt.addr, host, w.Code)
 			}
 		}
@@ -212,8 +213,51 @@ func TestUnknownRoutes(t *testing.T) {
 	}
 }
 
+func TestBadQueries(t *testing.T) {
+	e := newEnv(t, envOptions{dest: true})
+	// Open the session first, so a check that let a request through would
+	// show up as a call on it.
+	if w := e.serve("GET", "/api/list"); w.Code != http.StatusOK {
+		t.Fatalf("root listing = %d", w.Code)
+	}
+	s := e.d.session(0)
+	tests := []struct{ query, code string }{
+		{"path=%ZZ", "bad_query"},
+		{"path=a;b", "bad_query"},
+		{"path=MyWorks&path=%ZZ", "bad_query"},
+		{"path=MyWorks&path=MyWorks", "bad_query"},
+		{"path=MyWorks&download=1&download=1", "bad_query"},
+		{"path=%00", "bad_path"},
+		{"path=a%00b", "bad_path"},
+		{"path=%FF", "bad_path"},
+		{"path=.", "bad_path"},
+		{"path=%2FMyWorks", "bad_path"},
+		{"path=MyWorks%2F", "bad_path"},
+		{"path=MyWorks%2F%2FM%2031", "bad_path"},
+		{"path=MyWorks%2F.%2FM%2031", "bad_path"},
+		{"path=MyWorks%2F..%2FMyWorks", "bad_path"},
+		{"path=..", "bad_path"},
+		{"path=MyWorks%5CM%2031", "bad_path"},
+	}
+	for _, tt := range tests {
+		w := e.serve("GET", "/api/list?"+tt.query)
+		if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), tt.code) {
+			t.Errorf("/api/list?%s = %d %q, want 400 %s", tt.query, w.Code, w.Body, tt.code)
+		}
+	}
+	// An empty path is the root.
+	if w := e.serve("GET", "/api/list?path="); w.Code != http.StatusOK {
+		t.Errorf("/api/list?path= = %d", w.Code)
+	}
+	if s.n("ReadDir") != 2 || e.d.dials() != 1 {
+		t.Errorf("bad queries reached the device: %d listings (want 2), %d dials", s.n("ReadDir"), e.d.dials())
+	}
+}
+
 func TestHeaders(t *testing.T) {
 	ok := newEnv(t, envOptions{dest: true})
+	badState := newEnv(t, envOptions{dest: true, recordsErr: errors.New("bad state")})
+	noDevice := newEnv(t, envOptions{dialErr: errors.New("no route")})
 	tests := []struct {
 		e      *env
 		method string
@@ -224,10 +268,16 @@ func TestHeaders(t *testing.T) {
 		{ok, "GET", "/", nil, 200},
 		{ok, "GET", "/app.js", nil, 200},
 		{ok, "GET", "/style.css", nil, 200},
+		{ok, "GET", "/api/list?path=MyWorks", nil, 200},
 		{ok, "GET", "/", []string{"Host", "evil.example:53817"}, 403},
-		{ok, "GET", "/app.js", []string{"Sec-Fetch-Site", "cross-site"}, 403},
-		{ok, "POST", "/", nil, 405},
+		{ok, "GET", "/api/list", []string{"Sec-Fetch-Site", "cross-site"}, 403},
+		{ok, "POST", "/api/list", nil, 405},
 		{ok, "GET", "/nowhere", nil, 404},
+		{ok, "GET", "/api/list?path=%ZZ", nil, 400},
+		{ok, "GET", "/api/list?path=MyWorks%2FM%2031%2FX.fit", nil, 400},
+		{ok, "GET", "/api/list?path=nothing", nil, 404},
+		{badState, "GET", "/api/list", nil, 500},
+		{noDevice, "GET", "/api/list", nil, 502},
 	}
 	for _, tt := range tests {
 		w := tt.e.serve(tt.method, tt.target, tt.header...)
