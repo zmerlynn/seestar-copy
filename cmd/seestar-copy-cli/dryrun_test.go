@@ -228,9 +228,10 @@ func chmodTree(t *testing.T, root string, dirMode, fileMode os.FileMode) {
 func TestDryRunFailures(t *testing.T) {
 	old := time.Now().Add(-time.Hour)
 	for _, tc := range []struct {
-		name  string
-		files []string
-		log   []string
+		name       string
+		files      []string
+		unreadable []string
+		log        []string
 	}{
 		{name: "file fails", files: []string{"MyWorks/a.fit", "MyWorks/A.fit", "MyWorks/b.fit"},
 			log: []string{
@@ -240,10 +241,10 @@ func TestDryRunFailures(t *testing.T) {
 				`level=INFO msg="dry run done" copy=1 replace=0 adopt=0 waiting=0 failed=2 bytes=3 `,
 				`level=ERROR msg="sync failed" error="failed files: 2"`,
 			}},
-		{name: "listing fails", files: []string{"MyWorks", "Autorun/Dark/a.fit"},
+		{name: "listing fails", files: []string{"MyWorks/sub/a.fit", "Autorun/Dark/a.fit"}, unreadable: []string{"MyWorks/sub"},
 			log: []string{
 				`level=ERROR msg="dry run failed" copy=0 replace=0 adopt=0 waiting=0 failed=0 bytes=0 elapsed=`,
-				`level=ERROR msg="sync failed" error="list MyWorks: source MyWorks is not a directory"`,
+				`level=ERROR msg="sync failed" error="list the share: readdir MyWorks/sub: permission denied"`,
 			}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -252,6 +253,7 @@ func TestDryRunFailures(t *testing.T) {
 			for _, p := range tc.files {
 				dev.set(p, "abc", old)
 			}
+			dev.unreadable = tc.unreadable
 			dev.use(t)
 			code, _, stderr := dryRun(t, "--dest", dest, "--state-dir", stateDir)
 			if code != exitFailure {
