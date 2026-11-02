@@ -767,7 +767,7 @@ time=2026-11-09T09:00:01.502Z level=INFO msg="listing done" files=212 folders=9 
 | Code | Meaning |
 | --- | --- |
 | 0 | The listing is complete. |
-| 1 | The state could not be read, the connection or a listing failed (`connect to ...` or `list the share: ...`), the output could not be written, or a signal stopped find before the listing was complete. |
+| 1 | The state could not be read, the connection or a listing failed (`connect to ...` or `list the share: ...`), the output could not be written, or a signal stopped find before it wrote the whole listing. |
 | 2 | A usage error: an unknown or invalid flag, a missing `--endpoint`, a bad `--format` or `--older-than`, an empty `--dest` or `--state-dir`, `--state-dir` without `--dest`, or a positional argument. |
 
 ## licenses
