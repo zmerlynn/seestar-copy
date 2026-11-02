@@ -94,6 +94,13 @@ To build the command:
 go build -mod=vendor ./cmd/seestar-copy-cli
 ```
 
+`main` changes only through a pull request. The optional pre-push hook
+rejects pushes to `main`. It is enabled once per clone with:
+
+```sh
+git config core.hooksPath .githooks
+```
+
 ## Releasing
 
 A `v*` tag builds the release: Linux and Windows archives, a signed and
