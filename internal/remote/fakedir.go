@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"sync/atomic"
-	"syscall"
 
 	"github.com/zmerlynn/seestar-copy/internal/readonly"
 )
@@ -70,7 +69,9 @@ func (f *FakeDir) RemoveDir(ctx context.Context, p string) error {
 	}
 	f.removes.Add(1)
 	err = f.root.Remove(filepath.FromSlash(p))
-	if errors.Is(err, syscall.ENOTEMPTY) {
+	// fs.ErrExist matches ENOTEMPTY and EEXIST on Unix and
+	// ERROR_DIR_NOT_EMPTY on Windows.
+	if errors.Is(err, fs.ErrExist) {
 		return &fs.PathError{Op: "remove", Path: p, Err: ErrNotEmpty}
 	}
 	return err

@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -373,7 +374,12 @@ func TestDeleteRace(t *testing.T) {
 
 // A name holding a backslash, which the share would read as a folder
 // separator, is never removed, nor is the file it would name, in any mode.
+// TestRemoverRefusesInvalidPaths and DecideDelete's tests cover the refusal
+// on every system.
 func TestDeleteBackslashName(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fixture needs a backslash in a name, which Windows reads as a separator")
+	}
 	saved := stateRec{"MyWorks/sub/saved.fit", "saved", deleteOld}
 	for _, mode := range [][]string{{"--ignore-state"}, {"--trust-state"}, nil} {
 		s := newWritableShare(t)
