@@ -165,3 +165,149 @@ func TestFailedDialCancelsItsContext(t *testing.T) {
 		}
 	})
 }
+
+// A dial whose every waiter left still publishes a timed session.
+func TestAbandonedDial(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		d := &dialer{fsys: fstest.MapFS{}, gate: make(chan struct{})}
+		p, _ := newPool(d)
+		defer p.Close()
+		ctx, cancel := context.WithCancel(context.Background())
+		var wg sync.WaitGroup
+		for range 3 {
+			wg.Go(func() {
+				if _, err := p.Get(ctx); !errors.Is(err, context.Canceled) {
+					t.Errorf("Get = %v, want context.Canceled", err)
+				}
+			})
+		}
+		synctest.Wait()
+		cancel()
+		wg.Wait()
+		close(d.gate)
+		synctest.Wait()
+		time.Sleep(idleTimeout)
+		synctest.Wait()
+		s := d.session(0)
+		if s.n("Close") != 1 {
+			t.Fatalf("session closed %d times, want 1", s.n("Close"))
+		}
+		if s.ctx.Err() == nil {
+			t.Error("the retired session's context is still live")
+		}
+		l := mustGet(t, p, context.Background())
+		defer l.Release()
+		if d.dials() != 2 {
+			t.Errorf("dials = %d, want 2", d.dials())
+		}
+	})
+}
+
+// A waiter canceled at the instant the dial publishes, in either order,
+// leaves a session that closes 30 s after its last use.
+func TestPublicationRace(t *testing.T) {
+	for _, cancelFirst := range []bool{true, false} {
+		synctest.Test(t, func(t *testing.T) {
+			d := &dialer{fsys: fstest.MapFS{}, gate: make(chan struct{})}
+			p, _ := newPool(d)
+			defer p.Close()
+			ctx, cancel := context.WithCancel(context.Background())
+			got := make(chan *Lease, 1)
+			go func() {
+				l, _ := p.Get(ctx)
+				got <- l
+			}()
+			synctest.Wait()
+			if cancelFirst {
+				cancel()
+				close(d.gate)
+			} else {
+				close(d.gate)
+				cancel()
+			}
+			if l := <-got; l != nil {
+				l.Release()
+			}
+			time.Sleep(idleTimeout - time.Nanosecond)
+			synctest.Wait()
+			if d.session(0).closed() {
+				t.Fatalf("cancelFirst=%v: closed early", cancelFirst)
+			}
+			time.Sleep(time.Nanosecond)
+			synctest.Wait()
+			if !d.session(0).closed() {
+				t.Fatalf("cancelFirst=%v: not closed 30 s after its last use", cancelFirst)
+			}
+		})
+	}
+}
+
+func TestLateDialAfterClose(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		d := &dialer{fsys: fstest.MapFS{}, gate: make(chan struct{})}
+		p, logs := newPool(d)
+		waiter := make(chan error)
+		go func() {
+			_, err := p.Get(context.Background())
+			waiter <- err
+		}()
+		synctest.Wait()
+		p.Close()
+		close(d.gate)
+		if err := <-waiter; !errors.Is(err, errStopped) {
+			t.Errorf("waiter: Get = %v, want errStopped", err)
+		}
+		synctest.Wait()
+		s := d.session(0)
+		if s.n("Close") != 1 || s.ctx.Err() == nil {
+			t.Errorf("late session: Close calls = %d, context %v; want 1 and canceled", s.n("Close"), s.ctx.Err())
+		}
+		if _, err := p.Get(context.Background()); !errors.Is(err, errStopped) {
+			t.Errorf("Get after Close = %v, want errStopped", err)
+		}
+		if d.dials() != 1 {
+			t.Errorf("dials = %d, want 1", d.dials())
+		}
+		if logs.count("connect failed") != 0 || logs.count("session opened") != 0 {
+			t.Errorf("logs:\n%s", logs)
+		}
+	})
+}
+
+// The dial's 30 s limit is not the session's lifetime.
+func TestDialTimerIsNotLifetime(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		d := &dialer{fsys: fstest.MapFS{}}
+		d.setup = func(*spy) { time.Sleep(time.Second) }
+		p, _ := newPool(d)
+		defer p.Close()
+		l := mustGet(t, p, context.Background())
+		time.Sleep(90 * time.Second)
+		synctest.Wait()
+		s := d.session(0)
+		if s.ctx.Err() != nil || s.closed() {
+			t.Fatalf("leased session at 90 s: context %v, closed %v", s.ctx.Err(), s.closed())
+		}
+		l.Release()
+	})
+}
+
+func TestSlowDialTimesOut(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		d := &dialer{fsys: fstest.MapFS{}}
+		d.setup = func(*spy) { time.Sleep(dialTimeout + 5*time.Second) }
+		p, logs := newPool(d)
+		defer p.Close()
+		if _, err := p.Get(context.Background()); err == nil {
+			t.Fatal("Get succeeded after the dial timed out")
+		}
+		synctest.Wait()
+		s := d.session(0)
+		if s.n("Close") != 1 || s.ctx.Err() == nil {
+			t.Errorf("late session: Close calls = %d, context %v; want 1 and canceled", s.n("Close"), s.ctx.Err())
+		}
+		if logs.count("connect failed") != 1 {
+			t.Errorf("logs:\n%s", logs)
+		}
+	})
+}
