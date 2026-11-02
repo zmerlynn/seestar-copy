@@ -17,9 +17,9 @@ import (
 // functions and the os.Root and os.File methods that create, open for
 // writing, write at an offset, truncate, sync, rename, remove, link or
 // change times, modes or owners, go-smb2's Share.Remove, and the
-// remote.Remover methods. A plain Write is not matched, since hashes and buffers have one
-// too; an os.File can only be written after one of these opened it for
-// writing, and WriteAt, Truncate and Sync are matched.
+// remote.Remover methods. A plain Write is not matched, since hashes and
+// buffers have one too; an os.File can only be written after one of these
+// opened it for writing, and WriteAt, Truncate and Sync are matched.
 var writeNames = map[string]bool{
 	"Chmod": true, "Chown": true, "Chtimes": true, "Create": true, "CreateTemp": true,
 	"Lchown": true, "Link": true, "Mkdir": true, "MkdirAll": true, "MkdirTemp": true,
@@ -123,6 +123,7 @@ func TestWritesAreGuarded(t *testing.T) {
 		"internal/state.Open", "internal/state.create", "internal/state.lockFile", "internal/state.Append",
 		"internal/state.syncDir", "internal/copier.removeTemps", "internal/copier.download", "internal/copier.syncFolder",
 		"internal/remote.RemoveFile", "internal/remote.RemoveDir",
+		"cmd/seestar-copy-cli.deleteFile", "cmd/seestar-copy-cli.removeFolder",
 	} {
 		if !slices.Contains(guarded, want) {
 			t.Errorf("the scan did not find the writes in %s; found %q", want, guarded)
