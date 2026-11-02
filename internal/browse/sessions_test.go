@@ -3,11 +3,15 @@ package browse
 import (
 	"context"
 	"errors"
+	"io"
+	"io/fs"
 	"sync"
 	"testing"
 	"testing/fstest"
 	"testing/synctest"
 	"time"
+
+	"github.com/zmerlynn/seestar-copy/internal/remote"
 )
 
 func newPool(d *dialer) (*Sessions, *logBuffer) {
@@ -135,6 +139,7 @@ func TestCloseIsIdempotent(t *testing.T) {
 		if s.n("Close") != 1 || s.ctx.Err() == nil {
 			t.Errorf("Close calls = %d, context %v; want 1 and canceled", s.n("Close"), s.ctx.Err())
 		}
+		l.Fail(io.ErrUnexpectedEOF)
 		l.Release()
 		if logs.count("session closed", "reason=stopped") != 1 {
 			t.Errorf("logs:\n%s", logs)
@@ -308,6 +313,122 @@ func TestSlowDialTimesOut(t *testing.T) {
 		}
 		if logs.count("connect failed") != 1 {
 			t.Errorf("logs:\n%s", logs)
+		}
+	})
+}
+
+func TestFail(t *testing.T) {
+	quiet := []error{fs.ErrNotExist, remote.ErrNotDir, io.EOF, fs.ErrInvalid, fs.ErrPermission}
+	for _, err := range quiet {
+		synctest.Test(t, func(t *testing.T) {
+			d := &dialer{fsys: fstest.MapFS{}}
+			p, _ := newPool(d)
+			defer p.Close()
+			l := mustGet(t, p, context.Background())
+			l.Fail(&fs.PathError{Op: "open", Path: "x", Err: err})
+			l.Release()
+			if d.session(0).closed() {
+				t.Errorf("Fail(%v) retired the session", err)
+			}
+		})
+	}
+	synctest.Test(t, func(t *testing.T) {
+		d := &dialer{fsys: fstest.MapFS{}}
+		p, logs := newPool(d)
+		defer p.Close()
+		l := mustGet(t, p, context.Background())
+		l.Fail(io.ErrUnexpectedEOF)
+		if !d.session(0).closed() {
+			t.Fatal("Fail(io.ErrUnexpectedEOF) kept the session")
+		}
+		l.Release()
+		mustGet(t, p, context.Background()).Release()
+		if d.dials() != 2 {
+			t.Errorf("dials = %d, want 2", d.dials())
+		}
+		if logs.count("session closed", "reason=failed") != 1 {
+			t.Errorf("logs:\n%s", logs)
+		}
+	})
+}
+
+func TestStaleLease(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		d := &dialer{fsys: fstest.MapFS{}}
+		p, _ := newPool(d)
+		defer p.Close()
+		old1 := mustGet(t, p, context.Background())
+		old2 := mustGet(t, p, context.Background())
+		old1.Fail(io.ErrUnexpectedEOF)
+		l := mustGet(t, p, context.Background())
+		old2.Fail(io.ErrUnexpectedEOF)
+		old2.Release()
+		old1.Release()
+		if d.session(1).closed() || p.leases() != 1 {
+			t.Fatalf("a stale lease changed the new session: closed %v, leases %d", d.session(1).closed(), p.leases())
+		}
+		time.Sleep(10 * idleTimeout)
+		synctest.Wait()
+		if d.session(1).closed() {
+			t.Fatal("a stale Release armed the new session's idle timer")
+		}
+		l.Release()
+		time.Sleep(idleTimeout)
+		synctest.Wait()
+		if !d.session(1).closed() {
+			t.Fatal("not closed 30 s after the last release")
+		}
+	})
+}
+
+func TestGraceRetiresStuckSession(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		d := &dialer{fsys: fstest.MapFS{}}
+		p, logs := newPool(d)
+		defer p.Close()
+		ctx, cancel := context.WithCancel(context.Background())
+		l := mustGet(t, p, ctx)
+		if l.Context().Done() != nil {
+			t.Error("the lease context carries the request's cancellation")
+		}
+		cancel()
+		time.Sleep(cancelGrace - time.Nanosecond)
+		synctest.Wait()
+		if d.session(0).closed() {
+			t.Fatal("retired before the grace ended")
+		}
+		time.Sleep(time.Nanosecond)
+		synctest.Wait()
+		if !d.session(0).closed() || logs.count("session closed", "reason=stuck") != 1 {
+			t.Fatalf("not retired as stuck at the grace; logs:\n%s", logs)
+		}
+		l.Release()
+		mustGet(t, p, context.Background()).Release()
+		if d.dials() != 2 {
+			t.Errorf("dials = %d, want 2", d.dials())
+		}
+	})
+}
+
+func TestReleaseInGraceKeepsSession(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		d := &dialer{fsys: fstest.MapFS{}}
+		p, _ := newPool(d)
+		defer p.Close()
+		ctx, cancel := context.WithCancel(context.Background())
+		l := mustGet(t, p, ctx)
+		cancel()
+		time.Sleep(time.Second)
+		l.Release()
+		time.Sleep(idleTimeout - time.Nanosecond)
+		synctest.Wait()
+		if d.session(0).closed() {
+			t.Fatal("a released lease's grace retired the session")
+		}
+		time.Sleep(time.Nanosecond)
+		synctest.Wait()
+		if !d.session(0).closed() {
+			t.Fatal("not closed 30 s after the release")
 		}
 	})
 }

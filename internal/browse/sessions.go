@@ -7,6 +7,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"log/slog"
 	"sync"
 	"time"
@@ -18,6 +20,7 @@ import (
 const (
 	dialTimeout = 30 * time.Second // a dial and mount that takes longer fails
 	idleTimeout = 30 * time.Second // an unused session logs off after this
+	cancelGrace = 5 * time.Second  // a canceled request's SMB call may run this long
 )
 
 var (
@@ -62,6 +65,8 @@ type Lease struct {
 	p        *Sessions
 	s        *session
 	ctx      context.Context
+	stop     func() bool // unregisters the request context callback
+	grace    *time.Timer // armed once the request context ends
 	released bool
 }
 
@@ -75,7 +80,8 @@ func NewSessions(ctx context.Context, dial func(context.Context) (remote.Session
 
 // Get returns a lease on the current session, dialing one if there is none.
 // Concurrent calls share one dial. ctx is the request's: Get returns its
-// error if it ends first.
+// error if it ends first, and once it ends while the lease is held, the
+// lease's session is retired after cancelGrace unless the lease is released.
 func (p *Sessions) Get(ctx context.Context) (*Lease, error) {
 	p.mu.Lock()
 	if p.closed {
@@ -166,6 +172,13 @@ func (p *Sessions) lease(ctx context.Context, s *session) *Lease {
 		s.idle = nil
 	}
 	l := &Lease{p: p, s: s, ctx: context.WithoutCancel(ctx)}
+	l.stop = context.AfterFunc(ctx, func() {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		if !l.released {
+			l.grace = time.AfterFunc(cancelGrace, func() { p.retire(s, "stuck", func() bool { return !l.released }) })
+		}
+	})
 	return l
 }
 
@@ -205,8 +218,8 @@ func (p *Sessions) end(s *session, reason string) {
 }
 
 // Close closes the current session and cancels a dial in progress. Later
-// Gets fail without dialing, a dial that still succeeds is closed, and Release
-// changes nothing. Close may be called more than once.
+// Gets fail without dialing, a dial that still succeeds is closed, and Fail
+// and Release change nothing. Close may be called more than once.
 func (p *Sessions) Close() {
 	p.mu.Lock()
 	if p.closed {
@@ -235,6 +248,18 @@ func (l *Lease) Session() remote.Session { return l.s.s }
 // device may still answer it. The session's own context still ends it.
 func (l *Lease) Context() context.Context { return l.ctx }
 
+// Fail reports an error from an SMB call. An error that says nothing about
+// the connection is ignored; any other retires the lease's session if it is
+// still current, so the next Get dials again.
+func (l *Lease) Fail(err error) {
+	for _, quiet := range []error{fs.ErrNotExist, fs.ErrInvalid, fs.ErrPermission, io.EOF, remote.ErrNotDir} {
+		if errors.Is(err, quiet) {
+			return
+		}
+	}
+	l.p.retire(l.s, "failed", func() bool { return true })
+}
+
 // Release ends the lease. The last release on the current session arms its
 // idle timer; a lease whose session is no longer current changes nothing.
 func (l *Lease) Release() {
@@ -245,6 +270,10 @@ func (l *Lease) Release() {
 		return
 	}
 	l.released = true
+	l.stop()
+	if l.grace != nil {
+		l.grace.Stop()
+	}
 	if p.closed || p.cur != l.s {
 		return
 	}
