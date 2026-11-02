@@ -79,8 +79,10 @@ the default sources:
 <dest>/darklibrary/<file>
 ```
 
-Names are kept byte for byte. Each file gets the device file's modification
-time (mtime). Folders are created as needed; their mtimes are not set.
+Names are kept byte for byte. A downloaded file gets the device file's
+modification time (mtime). An [adopted](#how-a-pass-decides) file keeps its
+own, which is within 2 seconds of the device's. Folders are created as needed;
+their mtimes are not set.
 
 Only regular files are copied. Symbolic links and other special entries on
 the share are listed but neither followed nor copied. A source that does not
@@ -170,8 +172,10 @@ A crash or failure at any step leaves either no state line for the file, or
 the complete file under its final name. If a crash loses a state line, the
 next pass finds the complete file and adopts it.
 
-An adoption only reads the local file. It fails if the file changes, or
-something else takes its path, while it is being hashed.
+An adoption only reads the local file. It fails if, while the file is being
+hashed, its size changes, its mtime moves more than 2 seconds from the
+device's, or something else takes its path. A rewrite that keeps the size and
+a near mtime is not noticed.
 
 ### Temporary files
 
