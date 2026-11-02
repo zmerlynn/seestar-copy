@@ -242,16 +242,14 @@ func (h *handler) file(w http.ResponseWriter, r *http.Request, p string, downloa
 		h.fileError(w, http.StatusBadRequest, "not_a_file", "The path is a folder.")
 		return
 	}
-	var failed error
-	rs := newFileReader(r.Context(), f, info.Size(), func(err error) {
-		failed = err
-		lease.Fail(err)
-	})
+	rs := newFileReader(r.Context(), f, info.Size(), lease.Fail)
 	name := path.Base(p)
 	w.Header().Set("Content-Type", contentType(name))
 	w.Header().Set("Content-Disposition", disposition(name, download))
 	http.ServeContent(w, r, "", info.ModTime(), rs)
-	if failed != nil && r.Context().Err() == nil {
+	// A multipart response's producer may still be in a Read. Wait for it
+	// before the file closes and the lease, with its grace, is released.
+	if failed := rs.stop(); failed != nil && r.Context().Err() == nil {
 		h.cfg.Log.Warn("request failed", "path", p, "error", failed)
 	}
 }

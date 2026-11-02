@@ -92,28 +92,40 @@ func (t thumbs) For(name string) string {
 // fileReader is the io.ReadSeeker http.ServeContent reads one open file
 // through. It keeps its own offset, buffers reads, takes the end from the
 // size Stat gave, and starts no device read once the request has ended.
+//
+// A multipart response reads in a goroutine of ServeContent's that can
+// outlive the call, so mu is held through each Read and Seek, and stop
+// waits for one in progress and refuses any later one. mu is a channel of
+// one slot rather than a sync.Mutex, so testing/synctest sees a wait on it
+// as durably blocked.
 type fileReader struct {
-	f    remote.File
-	size int64
-	off  int64 // the logical offset
-	src  source
-	buf  *bufio.Reader
+	mu      chan struct{}
+	stopped bool
+	err     error // the last device error but EOF
+	f       remote.File
+	size    int64
+	off     int64 // the logical offset
+	src     source
+	buf     *bufio.Reader
+	fail    func(error)
 }
+
+// errReaderStopped is what a fileReader answers after stop.
+var errReaderStopped = errors.New("file reader stopped")
 
 // source is the device side of a fileReader's buffer.
 type source struct {
-	ctx  context.Context // the request's
-	f    remote.File
-	fail func(error) // gets every device error but EOF
+	ctx context.Context // the request's
+	r   *fileReader
 }
 
 func (s source) Read(p []byte) (int, error) {
 	if err := s.ctx.Err(); err != nil {
 		return 0, err
 	}
-	n, err := s.f.Read(p)
+	n, err := s.r.f.Read(p)
 	if err != nil && err != io.EOF {
-		s.fail(err)
+		s.r.failed(err)
 	}
 	return n, err
 }
@@ -121,17 +133,47 @@ func (s source) Read(p []byte) (int, error) {
 // newFileReader reads f, whose Stat gave size, for the request ctx. fail gets
 // every device error from a Read or Seek, but not the request's own error.
 func newFileReader(ctx context.Context, f remote.File, size int64, fail func(error)) *fileReader {
-	src := source{ctx: ctx, f: f, fail: fail}
-	return &fileReader{f: f, size: size, src: src, buf: bufio.NewReaderSize(src, int(min(size, maxBuffer)))}
+	r := &fileReader{mu: make(chan struct{}, 1), f: f, size: size, fail: fail}
+	r.src = source{ctx: ctx, r: r}
+	r.buf = bufio.NewReaderSize(r.src, int(min(size, maxBuffer)))
+	return r
+}
+
+func (r *fileReader) lock()   { r.mu <- struct{}{} }
+func (r *fileReader) unlock() { <-r.mu }
+
+// failed records a device error and passes it on; mu is held.
+func (r *fileReader) failed(err error) {
+	r.err = err
+	r.fail(err)
+}
+
+// stop waits for a Read or Seek in progress, refuses any later one, and
+// gives the last device error, or nil.
+func (r *fileReader) stop() error {
+	r.lock()
+	defer r.unlock()
+	r.stopped = true
+	return r.err
 }
 
 func (r *fileReader) Read(p []byte) (int, error) {
+	r.lock()
+	defer r.unlock()
+	if r.stopped {
+		return 0, errReaderStopped
+	}
 	n, err := r.buf.Read(p)
 	r.off += int64(n)
 	return n, err
 }
 
 func (r *fileReader) Seek(offset int64, whence int) (int64, error) {
+	r.lock()
+	defer r.unlock()
+	if r.stopped {
+		return 0, errReaderStopped
+	}
 	var to int64
 	switch whence {
 	case io.SeekStart:
@@ -147,7 +189,7 @@ func (r *fileReader) Seek(offset int64, whence int) (int64, error) {
 		return 0, errors.New("seek: negative position")
 	}
 	if _, err := r.f.Seek(to, io.SeekStart); err != nil {
-		r.src.fail(err)
+		r.failed(err)
 		return 0, err
 	}
 	r.buf.Reset(r.src)

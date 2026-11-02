@@ -60,6 +60,7 @@ type spy struct {
 	block     string
 	openDelay time.Duration                        // each Open sleeps this long first, ignoring every context
 	seekFault func(offset int64, whence int) error // if not nil, each file Seek's error
+	readFault func() error                         // if not nil, called by each file Read first; a non-nil result is its error
 	done      chan struct{}
 	once      sync.Once
 
@@ -133,6 +134,11 @@ type spyFile struct {
 
 func (f *spyFile) Read(p []byte) (int, error) {
 	f.s.count("Read")
+	if f.s.readFault != nil {
+		if err := f.s.readFault(); err != nil {
+			return 0, err
+		}
+	}
 	return f.File.Read(p)
 }
 

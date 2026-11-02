@@ -3,6 +3,8 @@ package browse
 import (
 	"bytes"
 	"context"
+	"errors"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -165,4 +167,95 @@ func TestDepartedDownload(t *testing.T) {
 	if e.logs.count("request failed") != 0 {
 		t.Errorf("logged a departed client:\n%s", e.logs)
 	}
+}
+
+// lateWriter fails its first body write once a device Read has started.
+type lateWriter struct {
+	*httptest.ResponseRecorder
+	reading chan struct{}
+}
+
+func (w lateWriter) Write(p []byte) (int, error) {
+	<-w.reading
+	return 0, errors.New("client gone")
+}
+
+// startMultipart starts a two-range request whose writer fails on the first
+// part's header, after http.ServeContent's producer has begun a device Read
+// that read decides the outcome of.
+func startMultipart(t *testing.T, read func(s *spy) error) (*env, started) {
+	reading := make(chan struct{})
+	e := newEnv(t, envOptions{setup: firstOnly(func(s *spy) {
+		s.readFault = func() error {
+			close(reading)
+			return read(s)
+		}
+	})})
+	ctx, cancel := context.WithCancel(context.Background())
+	r := httptest.NewRequestWithContext(ctx, "GET", fitURL, nil)
+	r.Host = e.addr.String()
+	r.Header.Set("Range", "bytes=0-9,20-29")
+	req := started{cancel: cancel, done: make(chan *httptest.ResponseRecorder, 1)}
+	go func() {
+		w := lateWriter{httptest.NewRecorder(), reading}
+		e.h.ServeHTTP(w, r)
+		req.done <- w.ResponseRecorder
+	}()
+	return e, req
+}
+
+// A multipart response whose client fails mid-part waits for the device
+// Read in progress before it closes the file or releases the lease, so the
+// grace still retires a Read that never returns.
+func TestMultipartStuckRead(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		e, req := startMultipart(t, func(s *spy) error {
+			<-s.done
+			return fs.ErrClosed
+		})
+		synctest.Wait()
+		s := e.d.session(0)
+		if req.returned() || s.n("FileClose") != 0 || e.p.leases() != 1 {
+			t.Fatalf("during the Read: returned %v, %d file closes, %d leases; want false, 0, 1", req.returned(), s.n("FileClose"), e.p.leases())
+		}
+		req.cancel()
+		time.Sleep(cancelGrace - time.Second)
+		synctest.Wait()
+		if req.returned() || s.n("FileClose") != 0 || e.p.leases() != 1 {
+			t.Fatalf("before the grace: returned %v, %d file closes, %d leases", req.returned(), s.n("FileClose"), e.p.leases())
+		}
+		time.Sleep(time.Second)
+		synctest.Wait()
+		if !req.returned() || !s.closed() || s.n("FileClose") != 1 || e.p.leases() != -1 || e.logs.count("session closed", "reason=stuck") != 1 {
+			t.Fatalf("at the grace: returned %v, closed %v, %d file closes, %d leases; logs:\n%s",
+				req.returned(), s.closed(), s.n("FileClose"), e.p.leases(), e.logs)
+		}
+		if s.n("Read") != 1 || e.logs.count("request failed") != 0 {
+			t.Errorf("%d reads; logs:\n%s", s.n("Read"), e.logs)
+		}
+	})
+}
+
+// A Read in progress when a multipart client fails is waited for; its late
+// device error is logged and retires the session.
+func TestMultipartLateReadError(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		e, req := startMultipart(t, func(*spy) error {
+			time.Sleep(time.Second)
+			return errors.New("read fault")
+		})
+		synctest.Wait()
+		s := e.d.session(0)
+		if req.returned() || s.n("FileClose") != 0 || e.p.leases() != 1 {
+			t.Fatalf("during the Read: returned %v, %d file closes, %d leases; want false, 0, 1", req.returned(), s.n("FileClose"), e.p.leases())
+		}
+		time.Sleep(time.Second)
+		synctest.Wait()
+		if !req.returned() || !s.closed() || s.n("FileClose") != 1 || s.n("Read") != 1 {
+			t.Fatalf("after the Read: returned %v, closed %v, %d file closes, %d reads", req.returned(), s.closed(), s.n("FileClose"), s.n("Read"))
+		}
+		if e.logs.count("request failed", "read fault") != 1 || e.logs.count("session closed", "reason=failed") != 1 {
+			t.Errorf("logs:\n%s", e.logs)
+		}
+	})
 }

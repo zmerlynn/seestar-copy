@@ -170,4 +170,16 @@ func TestFileReaderReportsDeviceErrors(t *testing.T) {
 	if len(failed) != 2 {
 		t.Errorf("fail got %v, want the Read and Seek errors", failed)
 	}
+	if err := r.stop(); !errors.Is(err, broken) {
+		t.Errorf("stop = %v, want the last device error", err)
+	}
+	if _, err := r.Read(make([]byte, 1)); err != errReaderStopped {
+		t.Errorf("Read after stop = %v", err)
+	}
+	if _, err := r.Seek(0, io.SeekStart); err != errReaderStopped {
+		t.Errorf("Seek after stop = %v", err)
+	}
+	if len(failed) != 2 {
+		t.Errorf("a device call after stop: fail got %v", failed)
+	}
 }
