@@ -95,8 +95,8 @@ To look through the telescope's files in your web browser, run:
 seestar-copy-cli browse --endpoint 127.0.0.1:4445 --open
 ```
 
-The page shows one folder at a time, shows the telescope's `.jpg` images and
-saves any file you pick; it changes nothing. It is for this computer only
+The page shows one folder at a time, shows the telescope's `.jpg` images,
+`.txt` logs and FITS headers, and saves any file you pick; it changes nothing. It is for this computer only
 unless you ask otherwise. See [browse](docs/reference.md#browse).
 
 To free space on the telescope once your images are safe, run sync, then

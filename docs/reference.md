@@ -832,8 +832,8 @@ seestar-copy-cli browse --endpoint HOST:PORT [--dest DIR] [--listen ADDR] [--ope
 ```
 
 Serves a read-only web page for looking through the telescope's share. The
-page lists one folder at a time, shows a `.jpg` when you click it, and saves
-any file to this computer through the browser. With `--dest`, each file
+page lists one folder at a time, shows a `.jpg`, a `.txt` or a FITS header
+when you click it, and saves any file to this computer through the browser. With `--dest`, each file
 shows its [status](#statuses) in that destination's state, as for find.
 Like sync and find, browse only reads from the telescope, and it writes
 nothing on disk: not the destination, not the state, not a lock.
@@ -893,12 +893,22 @@ browser's Back button returns to the previous folder.
 
 A file's preview is the telescope's own small image: for a file `S.ext`,
 `S_thn.jpg` in the same folder if there is one, and otherwise `S.jpg`. Browse
-renders no FITS file, plays no video and processes no image.
+renders no FITS image, plays no video and processes no image.
 
-Only a file whose name ends in `.jpg`, in any case, is shown in the page.
-Clicking it opens it in a viewer with its own Save link. Every other file,
-whatever its name, is sent as a download, never shown. Save links save the
-file under its name on the share, through the browser's own download.
+Clicking a file opens a viewer with its own Save link for these names,
+matched in any case:
+
+| Name ends in | Clicking it shows |
+| --- | --- |
+| `.jpg` | The image. |
+| `.txt` | Its text, read as UTF-8. For a file over 1 MiB, only the first 1 MiB is shown, with a note; save the file to see all of it. |
+| `.fit` or `.fits` | Its FITS primary header as text, one card per line, up to the `END` card, without blank cards. Browse reads at most the first 28,800 bytes (ten 2,880-byte blocks); if no `END` card is in them, it shows what it read, with a note. The image itself is never shown. |
+
+The browser is given a `.jpg` as `image/jpeg` and a `.txt` as
+`text/plain; charset=utf-8`. Every other file, whatever its name, including
+a FITS file, is sent as a download, never shown by the browser itself; the
+page reads a FITS header on its own. Save links save the file under its name
+on the share, through the browser's own download.
 
 Each listing reads the folder from the telescope again, and with `--dest`
 reads the state again whenever the state file's size or modification time

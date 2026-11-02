@@ -34,8 +34,9 @@ func newBrowseCommand(log *slog.Logger) *cobra.Command {
 		Use:   "browse --endpoint HOST:PORT [flags]",
 		Short: "Serve a read-only web page for looking through the telescope's share",
 		Long: `Serve a read-only web page for looking through the telescope's share.
-The page lists one folder at a time, shows a .jpg when clicked, and saves
-any file to this computer through the browser. It shows the whole share:
+The page lists one folder at a time and saves any file to this computer
+through the browser. Clicking a .jpg shows the image, a .txt its text, and a
+.fit or .fits its FITS header as text. It shows the whole share:
 browse has no --exclude or --include. With --dest, each file shows its
 status in that destination's state, as for find --dest: copied, changed or
 new.
