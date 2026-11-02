@@ -85,9 +85,9 @@ async function showText(e, kind, signal) {
   const limit = kind === 'fits' ? fitsLimit : textLimit;
   viewNote.textContent = 'Loading…';
   try {
-    // An empty file has no range to ask for.
-    const headers = e.size > 0 ? { Range: 'bytes=0-' + (limit - 1) } : {};
-    const res = await fetch(fileURL(e.path), { headers, signal });
+    // The range is asked for whatever size the listing gave, which may be
+    // out of date. An empty file is answered 200 with no body.
+    const res = await fetch(fileURL(e.path), { headers: { Range: 'bytes=0-' + (limit - 1) }, signal });
     if (res.status !== 200 && res.status !== 206) {
       throw new Error((await res.text()).trim() || 'HTTP ' + res.status);
     }

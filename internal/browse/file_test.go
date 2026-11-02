@@ -9,6 +9,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"testing"
+	"testing/fstest"
 	"time"
 )
 
@@ -121,6 +122,17 @@ func TestFile(t *testing.T) {
 	}
 	if e.d.dials() != 1 || s.closed() || e.logs.count("request failed") != 0 {
 		t.Errorf("%d dials, closed %v; logs:\n%s", e.d.dials(), s.closed(), e.logs)
+	}
+}
+
+// The page asks every text or FITS read for its first bytes by range, even
+// when the listing said the file was empty. An empty file is answered 200
+// with no body, not 416, which the page would show as an error.
+func TestFileEmptyRange(t *testing.T) {
+	e := newEnv(t, envOptions{extra: fstest.MapFS{"MyWorks/log/empty.txt": {ModTime: t0}}})
+	w := e.serve("GET", "/file?path=MyWorks%2Flog%2Fempty.txt", "Range", "bytes=0-1048575")
+	if w.Code != 200 || w.Body.Len() != 0 {
+		t.Errorf("empty file's first MiB = %d, %d bytes; want 200 and none", w.Code, w.Body.Len())
 	}
 }
 
