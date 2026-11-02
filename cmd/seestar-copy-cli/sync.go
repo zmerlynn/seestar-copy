@@ -285,13 +285,14 @@ func (s *syncer) pass(ctx context.Context) (failed int, err error) {
 		return 0, fmt.Errorf("connect to %s: %w", s.opts.endpoint, err)
 	}
 	defer sess.Close()
+	// A failed listing still logs and counts what it skipped before failing.
 	decisions, counts, sel, err := s.decide(ctx, sess)
-	if err != nil {
-		return 0, err
-	}
 	skipped = len(sel.skipped)
 	for _, x := range sel.skipped {
 		s.log.Info("skipped", "path", x.path, "exclude", x.by.flag)
+	}
+	if err != nil {
+		return 0, err
 	}
 	// Each file is logged as it finishes, not at the end of the pass.
 	s.copier.Run(ctx, sess, s.opts.workers, decisions, func(r copier.Result) {
@@ -352,11 +353,11 @@ func (s *syncer) dryPass(ctx context.Context) (failed int, err error) {
 	defer sess.Close()
 	var decisions []plan.Decision
 	decisions, counts, sel, err = s.decide(ctx, sess)
-	if err != nil {
-		return 0, err
-	}
 	for _, x := range sel.skipped {
 		s.log.Info("would skip", "path", x.path, "exclude", x.by.flag)
+	}
+	if err != nil {
+		return 0, err
 	}
 	recorded := map[string]bool{}
 	for p := range s.records() {
@@ -392,11 +393,12 @@ func (s *syncer) dryPass(ctx context.Context) (failed int, err error) {
 
 // decide lists the share over sess and returns the pass decisions, their
 // counts and what the excludes left out. It logs a line for each file that
-// fails.
+// fails. If the listing fails, it returns only what the excludes left out
+// before the failure.
 func (s *syncer) decide(ctx context.Context, sess remote.Session) ([]plan.Decision, plan.Counts, selection, error) {
 	listing, sel, err := s.list(ctx, sess)
 	if err != nil {
-		return nil, plan.Counts{}, selection{}, err
+		return nil, plan.Counts{}, sel, err
 	}
 	in := plan.Input{
 		Listing:      listing,
@@ -441,7 +443,7 @@ type skippedEntry struct {
 
 // list lists the whole share, leaving out what the excludes match. Any
 // listing failure, of the root or of a folder that is not excluded, fails
-// the pass.
+// the pass; the returned selection then holds the entries skipped before it.
 func (s *syncer) list(ctx context.Context, sess remote.Session) ([]plan.Entry, selection, error) {
 	var sel selection
 	entries, err := sess.Walk(ctx, func(p string) bool {
@@ -452,7 +454,7 @@ func (s *syncer) list(ctx context.Context, sess remote.Session) ([]plan.Entry, s
 		return ok
 	})
 	if err != nil {
-		return nil, selection{}, fmt.Errorf("list the share: %w", err)
+		return nil, sel, fmt.Errorf("list the share: %w", err)
 	}
 	listing := make([]plan.Entry, 0, len(entries))
 	for _, e := range entries {

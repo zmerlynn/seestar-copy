@@ -99,7 +99,8 @@ matches. An excluded folder is skipped with everything in it and is never
 listed. Excluded files are not copied, adopted or recorded. Files already
 recorded in the state stay recorded. Each pass logs a `skipped` line for each
 excluded file or folder, with the pattern that matched, and counts them in its
-summary; a folder has one line, and what is in it has none.
+summary; a folder has one line, and what is in it has none. A pass whose
+listing fails still logs and counts what it skipped before the failure.
 
 Unless `--no-default-excludes` is given, sync leaves out what these flags
 would:

@@ -270,6 +270,43 @@ func TestDryRunReportsSelection(t *testing.T) {
 	checkLines(t, stderr, "no copied files recorded", folders("Plan"))
 }
 
+// A listing that fails after an exclude matched still fails the pass, copies
+// nothing, and logs and counts the entry skipped before the failure, in a
+// real pass and in a dry run.
+func TestSkipsBeforeListingFailure(t *testing.T) {
+	for _, tc := range []struct {
+		name, flag, skip, summary string
+	}{
+		{"pass", "--once", `msg=skipped path=.hidden exclude=.*`, `msg="pass failed" copied=0 replaced=0 adopted=0 waiting=0 failed=0 skipped=1 `},
+		{"dry run", "--dry-run", `msg="would skip" path=.hidden exclude=.*`, `msg="dry run failed" copy=0 replace=0 adopt=0 waiting=0 failed=0 skipped=1 `},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			readonly.Reset()
+			t.Cleanup(readonly.Reset)
+			dev := newDevice()
+			old := time.Now().Add(-time.Hour)
+			dev.set(".hidden/inside.fit", "abc", old)
+			dev.set("a.fit", "abc", old)
+			dev.set("zbad/b.fit", "abc", old)
+			dev.unreadable = []string{"zbad"}
+			dev.use(t)
+			dest := t.TempDir()
+			code, _, stderr := invoke(t, "sync", "--endpoint", "h:445", "--dest", dest, "--state-dir", t.TempDir(), tc.flag)
+			if code != exitFailure {
+				t.Fatalf("exit %d, want %d\n%s", code, exitFailure, stderr)
+			}
+			for _, want := range []string{tc.skip, tc.summary, `error="list the share: `} {
+				if !strings.Contains(stderr, want) {
+					t.Errorf("log lacks %q:\n%s", want, stderr)
+				}
+			}
+			if got := localFiles(t, dest); len(got) != 0 {
+				t.Errorf("copied %v after a failed listing", got)
+			}
+		})
+	}
+}
+
 // selectionSkips are the skip lines for selectionDevice under the defaults,
 // with msg as the message.
 func selectionSkips(msg string) []string {
