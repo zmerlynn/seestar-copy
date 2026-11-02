@@ -366,20 +366,33 @@ func TestFindFails(t *testing.T) {
 	}
 }
 
-// A state that cannot be loaded fails find before it connects.
+// A state that cannot be loaded fails find before it connects. The state
+// file has a malformed line that is not the last, which every OS reads
+// alike.
 func TestFindBadState(t *testing.T) {
 	dev := newDevice()
 	dev.use(t)
 	dest, stateDir := filepath.Join(t.TempDir(), "dest"), filepath.Join(t.TempDir(), "state")
+	abs, err := filepath.Abs(dest)
+	if err != nil {
+		t.Fatal(err)
+	}
 	p, err := state.Path(stateDir, dest)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(p, 0o755); err != nil { // a folder where the file goes
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	data := `{"v":1,"dest":` + strconv.Quote(abs) + `}
+not json
+{}
+`
+	if err := os.WriteFile(p, []byte(data), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	code, stdout, stderr := find(t, "--dest", dest, "--state-dir", stateDir)
-	if dials, _ := dev.counts(); code != exitFailure || stdout != "" || dials != 0 {
+	if dials, _ := dev.counts(); code != exitFailure || stdout != "" || dials != 0 || !strings.Contains(stderr, "line 2: invalid character") {
 		t.Errorf("exit %d, stdout %q, dials %d; want 1, none, 0\n%s", code, stdout, dials, stderr)
 	}
 }
