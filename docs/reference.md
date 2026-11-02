@@ -89,9 +89,9 @@ In one setup, copying through a seestar-wormhole listener:
   8.8 MiB/s;
 - earlier tests of that path topped out near 10 MiB/s.
 
-These are one setup's measurements, not guarantees. Fewer workers are
-slower. More workers are unlikely to help once the link is near its ceiling,
-and all of them share one SMB session.
+These are one setup's measurements, not guarantees. One worker was slower
+than four in these measurements. More workers may not help once the link is
+near its ceiling. All workers share one SMB session.
 
 ### Destination layout
 
@@ -288,8 +288,10 @@ drive is adopted too. The record keeps the device's mtime.
 
 ### What adoption covers
 
-Adoption, and every count in a pass's summary, covers only files that the
-device lists now and that the pass selects. A local file with no counterpart
+Adoption covers only files that the device lists now and that the pass
+selects. Pass counts come from the current device listing, not from an
+inventory of the destination. The skipped and unmatched counts also include
+files and folders the selection leaves out. A local file with no counterpart
 on the device, such as one the telescope no longer has, is never read,
 counted or reported. A destination seeded from an older archive can
 therefore show far fewer adopted files than it holds. That is expected.
@@ -398,9 +400,10 @@ not supported.
 Sync creates the `sync` folder, and any missing folders above it, with mode
 0700 less the umask, so only you can read them. A new state file is set to
 exactly 0600, whatever the umask. The lock files are created 0600, less the
-umask. A folder or file that already exists keeps its permissions. On
-Windows the mode bits do not apply, and privacy comes from the ACLs the
-folder inherits.
+umask. Existing folders and lock files keep their permissions. An existing
+nonempty state file keeps its permissions; an empty state file is replaced
+with a new 0600 file. On Windows the mode bits do not apply, and privacy
+comes from the ACLs the folder inherits.
 
 The state is keyed by destination only. With a second telescope, use a second
 destination.
