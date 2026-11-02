@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -139,6 +140,38 @@ func TestBrowseStatuses(t *testing.T) {
 	}
 	if code, stderr := b.end(), b.stderr.next(); code != exitOK || !strings.Contains(stderr, " dest="+dest) {
 		t.Errorf("exit %d\n%s", code, stderr)
+	}
+}
+
+// --open gets the printed URL; a failing opener is a warning and browse
+// keeps serving.
+func TestBrowseOpen(t *testing.T) {
+	statusDevice(t)
+	old := openBrowser
+	t.Cleanup(func() { openBrowser = old })
+	for _, fail := range []bool{false, true} {
+		opened := make(chan string, 1)
+		openBrowser = func(url string) error {
+			opened <- url
+			if fail {
+				return errors.New("no opener")
+			}
+			return nil
+		}
+		b := startBrowse(t, "--open")
+		if got := <-opened; got+"\n" != b.url {
+			t.Errorf("opened %q, printed %q", got, b.url)
+		}
+		if code, _ := b.get(t, "api/list"); code != 200 {
+			t.Errorf("after --open: listing = %d", code)
+		}
+		if code := b.end(); code != exitOK {
+			t.Errorf("exit %d", code)
+		}
+		stderr := b.stderr.next()
+		if warned := strings.Contains(stderr, `level=WARN msg="could not open a browser" error="no opener"`); warned != fail {
+			t.Errorf("failing opener %v, warned %v:\n%s", fail, warned, stderr)
+		}
 	}
 }
 

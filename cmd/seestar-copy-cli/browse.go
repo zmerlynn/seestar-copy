@@ -21,6 +21,7 @@ type browseOptions struct {
 	endpoint    string
 	listen      string
 	addr        netip.AddrPort // set by validate from listen
+	open        bool
 	dest        string
 	destSet     bool
 	stateDir    string
@@ -39,7 +40,7 @@ browse has no --exclude or --include. With --dest, each file shows its
 status in that destination's state, as for find --dest: copied, changed or
 new.
 Once listening, browse prints one line to stdout, the page's URL, and
-serves until Ctrl+C.
+serves until Ctrl+C. --open also opens that URL in the default browser.
 --listen takes an IP address and a port, never a host name; port 0 picks a
 free port. An IPv4-mapped IPv6 address, such as [::ffff:192.168.1.5]:0, and
 an address with a zone, such as [fe80::1%en0]:0, are refused: give the
@@ -50,7 +51,7 @@ browse never writes: not to the telescope, not to --dest, not to the state.
 Logs and errors go to stderr.
 Exit 0 when stopped by Ctrl+C, 1 when it cannot start or keep serving, 2 on
 a usage error.`,
-		Example: "  " + programName + " browse --endpoint 127.0.0.1:4445\n" +
+		Example: "  " + programName + " browse --endpoint 127.0.0.1:4445 --open\n" +
 			"  " + programName + " browse --endpoint 127.0.0.1:4445 --dest ~/Seestar",
 		Args: noArguments,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -65,6 +66,7 @@ a usage error.`,
 	f := cmd.Flags()
 	f.StringVar(&o.endpoint, "endpoint", "", "SMB host:port of the telescope or a proxy (required)")
 	f.StringVar(&o.listen, "listen", "127.0.0.1:0", "IP address and port to serve the page on; port 0 picks a free one")
+	f.BoolVar(&o.open, "open", false, "also open the page in the default browser")
 	f.StringVar(&o.dest, "dest", "", "local mirror folder whose state gives each file a status; never created")
 	f.StringVar(&o.stateDir, "state-dir", "", "folder for the state file of --dest (default: the per-user config folder's seestar-copy)")
 	return cmd
@@ -123,6 +125,9 @@ func pageURL(addr netip.AddrPort) string {
 // exposed reports whether a listener on ip serves other computers.
 func exposed(ip netip.Addr) bool { return !ip.IsLoopback() }
 
+// openBrowser opens a URL in the default browser. Tests replace it.
+var openBrowser = openURL
+
 // runBrowse serves the page until ctx is done. A stop by ctx returns nil.
 func runBrowse(ctx context.Context, o browseOptions, out io.Writer, log *slog.Logger) error {
 	readonly.Enable()
@@ -180,7 +185,8 @@ func runBrowse(ctx context.Context, o browseOptions, out io.Writer, log *slog.Lo
 	return err
 }
 
-// announce logs that browse is listening and prints the page's URL.
+// announce logs that browse is listening, prints the page's URL and, with
+// --open, opens it.
 func announce(o browseOptions, addr netip.AddrPort, out io.Writer, log *slog.Logger) error {
 	args := []any{"addr", addr.String(), "endpoint", o.endpoint}
 	if o.destSet {
@@ -190,8 +196,14 @@ func announce(o browseOptions, addr netip.AddrPort, out io.Writer, log *slog.Log
 	if exposed(addr.Addr()) {
 		log.Warn("serving the share unauthenticated to the network", "addr", addr.String())
 	}
-	if _, err := fmt.Fprintln(out, pageURL(addr)); err != nil {
+	url := pageURL(addr)
+	if _, err := fmt.Fprintln(out, url); err != nil {
 		return fmt.Errorf("print the URL: %w", err)
+	}
+	if o.open {
+		if err := openBrowser(url); err != nil {
+			log.Warn("could not open a browser", "error", err)
+		}
 	}
 	return nil
 }
