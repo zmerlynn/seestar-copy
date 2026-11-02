@@ -734,9 +734,11 @@ destination: a file moved out of it is still `copied`. Records whose files
 are no longer on the share are not listed. Folders have no status.
 
 Find takes no [lock](#lock), so it may run while a sync uses the same
-destination. If the destination or the state folder does not exist, every
-file is `new`, and neither is created. A torn final line in the state file is
-logged and ignored, as in a dry run. Without `--dest`, no state is read.
+destination. A missing or empty state file makes every file `new`. If the
+destination does not exist, find still uses any existing state. It creates
+neither the destination nor the state folder. A torn final line in the state
+file is logged and ignored, as in a dry run. Without `--dest`, no state is
+read.
 
 ### find logs
 
