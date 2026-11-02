@@ -46,10 +46,3 @@ func (a *ageValue) String() string {
 }
 
 func (a *ageValue) Type() string { return "age" }
-
-// olderThan reports whether a device mtime is at least limit old at now. A
-// limit of zero is no limit; otherwise an mtime in the future is never old
-// enough.
-func olderThan(now, mtime time.Time, limit time.Duration) bool {
-	return limit == 0 || now.Sub(mtime) >= limit
-}
