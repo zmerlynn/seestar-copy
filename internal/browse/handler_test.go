@@ -112,7 +112,7 @@ func (e *env) serve(method, target string, headers ...string) *httptest.Response
 }
 
 // routes is one request to every route.
-var routes = []string{"/", "/app.js", "/style.css", "/api/list?path=MyWorks", "/file?path=MyWorks%2FM%2031%2FX.jpg"}
+var routes = []string{"/", "/app.js", "/style.css", "/icon.svg", "/api/list?path=MyWorks", "/file?path=MyWorks%2FM%2031%2FX.jpg"}
 
 func TestHostCheck(t *testing.T) {
 	tests := []struct {
@@ -281,6 +281,7 @@ func TestHeaders(t *testing.T) {
 		{ok, "GET", "/", nil, 200},
 		{ok, "GET", "/app.js", nil, 200},
 		{ok, "GET", "/style.css", nil, 200},
+		{ok, "GET", "/icon.svg", nil, 200},
 		{ok, "GET", "/api/list?path=MyWorks", nil, 200},
 		{ok, "GET", "/file?path=MyWorks%2FM%2031%2FX.jpg", nil, 200},
 		{ok, "HEAD", "/file?path=MyWorks%2FM%2031%2FX.jpg", nil, 200},
@@ -344,6 +345,7 @@ func TestStatic(t *testing.T) {
 		"/?path=MyWorks": "text/html; charset=utf-8",
 		"/app.js":        "text/javascript; charset=utf-8",
 		"/style.css":     "text/css; charset=utf-8",
+		"/icon.svg":      "image/svg+xml",
 	} {
 		w := e.serve("GET", route)
 		if w.Code != 200 || w.Header().Get("Content-Type") != typ || w.Body.Len() == 0 {
@@ -359,8 +361,11 @@ func TestStatic(t *testing.T) {
 	if strings.Count(page, "<script") != 1 || !strings.Contains(page, `<script type="module" src="/app.js"></script>`) {
 		t.Error("index.html must load app.js as its only script")
 	}
+	if !strings.Contains(page, `<link rel="icon" type="image/svg+xml" href="/icon.svg">`) {
+		t.Error("index.html must link icon.svg as its icon")
+	}
 	size := 0
-	for _, f := range []string{"web/index.html", "web/app.js", "web/style.css"} {
+	for _, f := range []string{"web/index.html", "web/app.js", "web/style.css", "web/icon.svg"} {
 		b, err := assets.ReadFile(f)
 		if err != nil {
 			t.Fatal(err)

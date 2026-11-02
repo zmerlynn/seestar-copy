@@ -38,6 +38,7 @@ var static = map[string]struct{ file, typ string }{
 	"/":          {"web/index.html", "text/html; charset=utf-8"},
 	"/app.js":    {"web/app.js", "text/javascript; charset=utf-8"},
 	"/style.css": {"web/style.css", "text/css; charset=utf-8"},
+	"/icon.svg":  {"web/icon.svg", "image/svg+xml"},
 }
 
 type handler struct{ cfg Config }
