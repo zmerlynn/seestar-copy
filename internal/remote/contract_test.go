@@ -122,7 +122,7 @@ func runContract(t *testing.T, dial func(t *testing.T) Session) {
 
 	t.Run("Walk", func(t *testing.T) {
 		for _, source := range []string{"MyWorks", "Autorun/Dark", "MyWorks/M 31/sub dir", "MyWorks/empty"} {
-			got, err := session.Walk(ctx, source)
+			got, err := session.Walk(ctx, source, nil)
 			if err != nil {
 				t.Fatalf("Walk(%q): %v", source, err)
 			}
@@ -130,9 +130,50 @@ func runContract(t *testing.T, dial func(t *testing.T) Session) {
 		}
 	})
 
+	t.Run("WalkRoot", func(t *testing.T) {
+		got, err := session.Walk(ctx, ".", nil)
+		if err != nil {
+			t.Fatalf("Walk(\".\"): %v", err)
+		}
+		sameEntries(t, got, all)
+	})
+
+	t.Run("WalkSkip", func(t *testing.T) {
+		// A skipped folder is left out with everything below it, a
+		// skipped file alone; its later siblings are still listed. The
+		// root itself is never offered to skip.
+		skipped := map[string]bool{"MyWorks": true, "Autorun/Dark/Dark_10.0s_IRCUT_20261029-020000.fit": true}
+		var asked []string
+		got, err := session.Walk(ctx, ".", func(p string) bool {
+			asked = append(asked, p)
+			return skipped[p]
+		})
+		if err != nil {
+			t.Fatalf("Walk with skip: %v", err)
+		}
+		var want, wantAsked []Entry
+		for _, e := range all {
+			if !strings.HasPrefix(e.Path, "MyWorks/") {
+				wantAsked = append(wantAsked, e)
+				if !skipped[e.Path] {
+					want = append(want, e)
+				}
+			}
+		}
+		sameEntries(t, got, want)
+		if len(asked) != len(wantAsked) {
+			t.Errorf("skip asked about %q, want every listed entry above a skipped folder", asked)
+		}
+		for i := range min(len(asked), len(wantAsked)) {
+			if asked[i] != wantAsked[i].Path {
+				t.Errorf("skip asked about %q, want %q", asked[i], wantAsked[i].Path)
+			}
+		}
+	})
+
 	t.Run("WalkMissingSource", func(t *testing.T) {
 		for _, source := range []string{"darklibrary", "MyWorks/nope/deeper", "MyWorks/myworks-not"} {
-			_, err := session.Walk(ctx, source)
+			_, err := session.Walk(ctx, source, nil)
 			if !errors.Is(err, ErrSourceNotFound) || !errors.Is(err, fs.ErrNotExist) {
 				t.Errorf("Walk(%q) = %v, want ErrSourceNotFound and fs.ErrNotExist", source, err)
 			}
@@ -140,15 +181,19 @@ func runContract(t *testing.T, dial func(t *testing.T) Session) {
 	})
 
 	t.Run("WalkFileSource", func(t *testing.T) {
-		_, err := session.Walk(ctx, "outside.txt")
+		_, err := session.Walk(ctx, "outside.txt", nil)
 		if err == nil || errors.Is(err, ErrSourceNotFound) {
 			t.Errorf("Walk of a file = %v, want a non-sentinel error", err)
 		}
 	})
 
 	t.Run("InvalidPaths", func(t *testing.T) {
-		for _, p := range []string{"", ".", "/MyWorks", "MyWorks/", "MyWorks//case", "..", "MyWorks/../MyWorks", "./MyWorks", `MyWorks\case`} {
-			if _, err := session.Walk(ctx, p); !errors.Is(err, fs.ErrInvalid) {
+		// "." is the share root for Walk only.
+		if _, err := session.Open(ctx, "."); !errors.Is(err, fs.ErrInvalid) {
+			t.Errorf("Open(\".\") = %v, want fs.ErrInvalid", err)
+		}
+		for _, p := range []string{"", "/MyWorks", "MyWorks/", "MyWorks//case", "..", "MyWorks/../MyWorks", "./MyWorks", `MyWorks\case`} {
+			if _, err := session.Walk(ctx, p, nil); !errors.Is(err, fs.ErrInvalid) {
 				t.Errorf("Walk(%q) = %v, want fs.ErrInvalid", p, err)
 			}
 			if _, err := session.Open(ctx, p); !errors.Is(err, fs.ErrInvalid) {
@@ -282,7 +327,7 @@ func runContract(t *testing.T, dial func(t *testing.T) Session) {
 	t.Run("CanceledWalk", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
-		if _, err := session.Walk(ctx, "MyWorks"); !errors.Is(err, context.Canceled) {
+		if _, err := session.Walk(ctx, "MyWorks", nil); !errors.Is(err, context.Canceled) {
 			t.Errorf("Walk with a canceled context = %v", err)
 		}
 	})
@@ -299,7 +344,7 @@ func runContract(t *testing.T, dial func(t *testing.T) Session) {
 		if err := s.Close(); err != nil {
 			t.Errorf("second Close: %v", err)
 		}
-		if _, err := s.Walk(ctx, "MyWorks2"); err == nil {
+		if _, err := s.Walk(ctx, "MyWorks2", nil); err == nil {
 			t.Error("Walk after Close succeeded")
 		}
 		if _, err := s.Open(ctx, "MyWorks2/y.fit"); err == nil {

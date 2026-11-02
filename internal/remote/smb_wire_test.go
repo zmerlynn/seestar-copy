@@ -384,7 +384,7 @@ func TestSMBRequestsAreReadOnly(t *testing.T) {
 			t.Errorf("ReadAll = %d bytes, %v; want %d", len(got), err, len(data))
 		}
 		_ = f.Close()
-		if _, err := s.Walk(ctx, "MyWorks"); !errors.Is(err, ErrSourceNotFound) {
+		if _, err := s.Walk(ctx, "MyWorks", nil); !errors.Is(err, ErrSourceNotFound) {
 			t.Errorf("Walk = %v, want ErrSourceNotFound", err)
 		}
 		if _, err := s.Open(ctx, "MyWorks/locked.fit"); !errors.Is(err, fs.ErrPermission) {
@@ -459,7 +459,7 @@ func TestSMBErrorsNameEndpointAndPath(t *testing.T) {
 		if !errors.Is(err, fs.ErrPermission) || !errors.As(err, &pe) || !strings.Contains(err.Error(), wireEndpoint) || !strings.Contains(err.Error(), `"MyWorks/locked.fit"`) {
 			t.Errorf("denied Open = %v, want fs.ErrPermission naming %s and the path", err, wireEndpoint)
 		}
-		_, err = s.Walk(ctx, "MyWorks/M 31")
+		_, err = s.Walk(ctx, "MyWorks/M 31", nil)
 		if !errors.Is(err, ErrSourceNotFound) || !errors.Is(err, fs.ErrNotExist) || !strings.Contains(err.Error(), wireEndpoint) || !strings.Contains(err.Error(), `"MyWorks/M 31"`) {
 			t.Errorf("Walk of a missing source = %v, want ErrSourceNotFound naming %s and the source", err, wireEndpoint)
 		}
@@ -697,7 +697,7 @@ func TestPendingCallsEnd(t *testing.T) {
 	}
 	calls := map[string]call{
 		"Open":    {wire.SMB2_CREATE, func(s *SMB) error { _, err := s.Open(context.Background(), "MyWorks/a.fit"); return err }},
-		"Walk":    {wire.SMB2_CREATE, func(s *SMB) error { _, err := s.Walk(context.Background(), "MyWorks"); return err }},
+		"Walk":    {wire.SMB2_CREATE, func(s *SMB) error { _, err := s.Walk(context.Background(), "MyWorks", nil); return err }},
 		"Read":    {wire.SMB2_READ, func(s *SMB) error { return read(s, false) }},
 		"WriteTo": {wire.SMB2_READ, func(s *SMB) error { return read(s, true) }},
 	}

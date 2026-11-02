@@ -39,7 +39,7 @@ func TestWalkKinds(t *testing.T) {
 		"src/pipe": {Mode: fs.ModeNamedPipe, ModTime: mtime},
 		"src/dev":  {Mode: fs.ModeDevice, ModTime: mtime},
 	}
-	got, err := NewFake(fsys).Walk(t.Context(), "src")
+	got, err := NewFake(fsys).Walk(t.Context(), "src", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestWalkRefusesNamesThatAreNotOneElement(t *testing.T) {
 	base := fstest.MapFS{"src/a/b": {Data: []byte("x")}, "src/c": {Data: []byte("y")}}
 	for _, name := range []string{"", ".", "..", "x/y", "../c"} {
 		for _, dir := range []string{"src", "src/a"} {
-			_, err := NewFake(renamingFS{base, dir, name}).Walk(t.Context(), "src")
+			_, err := NewFake(renamingFS{base, dir, name}).Walk(t.Context(), "src", nil)
 			if err == nil || errors.Is(err, ErrSourceNotFound) {
 				t.Errorf("listing %q in %s: err = %v, want a refusal", name, dir, err)
 			}
@@ -93,7 +93,7 @@ func TestWalkRefusesNamesThatAreNotOneElement(t *testing.T) {
 	}
 	// Names that only look odd are kept byte for byte.
 	for _, name := range []string{"...", ".x", "a\\b", "a b ", "\xff"} {
-		got, err := NewFake(renamingFS{base, "src", name}).Walk(t.Context(), "src")
+		got, err := NewFake(renamingFS{base, "src", name}).Walk(t.Context(), "src", nil)
 		if err != nil {
 			t.Errorf("listing %q: %v", name, err)
 			continue
@@ -121,19 +121,81 @@ func (f failingFS) ReadDir(name string) ([]fs.DirEntry, error) {
 func TestWalkErrors(t *testing.T) {
 	base := fstest.MapFS{"src/a/b": {Data: []byte("x")}}
 	// A directory that vanishes below the source is not a missing source.
-	_, err := NewFake(failingFS{base, "src/a", fs.ErrNotExist}).Walk(t.Context(), "src")
+	_, err := NewFake(failingFS{base, "src/a", fs.ErrNotExist}).Walk(t.Context(), "src", nil)
 	if !errors.Is(err, fs.ErrNotExist) || errors.Is(err, ErrSourceNotFound) {
 		t.Errorf("vanished subdirectory: %v", err)
 	}
 	// Other failures come back as they are, with no partial listing.
 	boom := errors.New("boom")
-	got, err := NewFake(failingFS{base, "src/a", boom}).Walk(t.Context(), "src")
+	got, err := NewFake(failingFS{base, "src/a", boom}).Walk(t.Context(), "src", nil)
 	if !errors.Is(err, boom) || got != nil {
 		t.Errorf("failing subdirectory: %v, %v", got, err)
 	}
-	_, err = NewFake(failingFS{base, "src", fs.ErrPermission}).Walk(t.Context(), "src")
+	_, err = NewFake(failingFS{base, "src", fs.ErrPermission}).Walk(t.Context(), "src", nil)
 	if !errors.Is(err, fs.ErrPermission) || errors.Is(err, ErrSourceNotFound) {
 		t.Errorf("unreadable source: %v", err)
+	}
+}
+
+// readsFS records every ReadDir and fails the one of dir.
+type readsFS struct {
+	fstest.MapFS
+	dir   string
+	reads *[]string
+}
+
+func (r readsFS) ReadDir(name string) ([]fs.DirEntry, error) {
+	*r.reads = append(*r.reads, name)
+	if name == r.dir {
+		return nil, &fs.PathError{Op: "readdir", Path: name, Err: fs.ErrPermission}
+	}
+	return r.MapFS.ReadDir(name)
+}
+
+// A skipped folder is never read, so one that cannot be read does not fail
+// the walk; the same folder not skipped does. The root is never offered to
+// skip, so a skip that matches everything gives an empty listing.
+func TestWalkSkip(t *testing.T) {
+	base := fstest.MapFS{
+		".hidden/x": {Data: []byte("x")},
+		"a/x":       {Data: []byte("x")},
+		"a/y":       {Data: []byte("y")},
+		"bad/z":     {Data: []byte("z")},
+		"c":         {Data: []byte("c")},
+	}
+	var reads []string
+	skip := map[string]bool{".hidden": true, "a/x": true, "bad": true}
+	var asked []string
+	got, err := NewFake(readsFS{base, "bad", &reads}).Walk(t.Context(), ".", func(p string) bool {
+		asked = append(asked, p)
+		return skip[p]
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{".hidden", "a", "a/x", "a/y", "bad", "c"}; !slices.Equal(asked, want) {
+		t.Errorf("skip asked about %q, want %q", asked, want)
+	}
+	if want := []string{".", "a"}; !slices.Equal(reads, want) {
+		t.Errorf("ReadDir calls %q, want %q", reads, want)
+	}
+	var paths []string
+	for _, e := range got {
+		paths = append(paths, e.Path)
+	}
+	if want := []string{"a", "a/y", "c"}; !slices.Equal(paths, want) {
+		t.Errorf("listing %q, want %q", paths, want)
+	}
+
+	reads = nil
+	got, err = NewFake(readsFS{base, "bad", &reads}).Walk(t.Context(), ".", func(p string) bool { return p != "bad" })
+	if !errors.Is(err, fs.ErrPermission) || got != nil {
+		t.Errorf("unreadable folder not skipped: Walk = %v, %v; want the error and no listing", got, err)
+	}
+
+	got, err = NewFake(base).Walk(t.Context(), ".", func(string) bool { return true })
+	if err != nil || len(got) != 0 {
+		t.Errorf("skipping every entry: Walk = %v, %v; want an empty listing", got, err)
 	}
 }
 
@@ -155,7 +217,7 @@ func TestWalkStopsWhenCanceledMidway(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	fsys := cancelingFS{fstest.MapFS{"src/a/b": {Data: []byte("x")}, "src/c": {Data: []byte("y")}}, "src/a", cancel}
-	got, err := NewFake(fsys).Walk(ctx, "src")
+	got, err := NewFake(fsys).Walk(ctx, "src", nil)
 	if !errors.Is(err, context.Canceled) || got != nil {
 		t.Errorf("Walk = %v, %v; want context.Canceled and no listing", got, err)
 	}
@@ -269,7 +331,7 @@ func TestWalkRefusesDirectoryAliases(t *testing.T) {
 	// before its contents are listed.
 	for _, name := range []string{"", ".", "..", "x/y"} {
 		fsys := &countingFS{MapFS: fstest.MapFS{"src/a/file": {Data: []byte("x")}}, name: name, max: 5}
-		got, err := NewFake(fsys).Walk(t.Context(), "src")
+		got, err := NewFake(fsys).Walk(t.Context(), "src", nil)
 		if err == nil || errors.Is(err, errTooManyReadDirs) || errors.Is(err, ErrSourceNotFound) || got != nil {
 			t.Errorf("directory listed as %q: Walk = %v, %v; want a refusal", name, got, err)
 		}
@@ -296,7 +358,7 @@ func (s statErrorFS) Stat(name string) (fs.FileInfo, error) {
 func TestWalkSourceStatErrors(t *testing.T) {
 	base := fstest.MapFS{"src/a": {Data: []byte("x")}}
 	for _, want := range []error{fs.ErrPermission, errors.New("i/o error")} {
-		got, err := NewFake(statErrorFS{base, "src", want}).Walk(t.Context(), "src")
+		got, err := NewFake(statErrorFS{base, "src", want}).Walk(t.Context(), "src", nil)
 		if !errors.Is(err, want) || errors.Is(err, ErrSourceNotFound) || got != nil {
 			t.Errorf("source Stat failing with %v: Walk = %v, %v; want that error alone and no listing", want, got, err)
 		}

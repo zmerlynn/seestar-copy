@@ -8,7 +8,8 @@
 //
 // Paths are share-relative, slash-separated and kept byte for byte. A path
 // handed to Walk or Open must be a valid io/fs path without backslashes; any
-// other path is refused with fs.ErrInvalid rather than cleaned.
+// other path is refused with fs.ErrInvalid rather than cleaned. Walk also
+// takes ".", the share root; Open does not.
 package remote
 
 import (
@@ -72,12 +73,17 @@ type Entry struct {
 // Dial) is canceled or Close is called. Close always ends every pending call.
 type Session interface {
 	// Walk lists the tree under source recursively, without the source
-	// itself. Each directory is followed by its contents, and the entries of
-	// one directory are in name order. Symbolic links are listed as Other
-	// and not followed. A missing source returns an error wrapping
-	// ErrSourceNotFound; any other failure is returned as it is, with no
-	// partial listing.
-	Walk(ctx context.Context, source string) ([]Entry, error)
+	// itself; source "." is the share root. Each directory is followed by
+	// its contents, and the entries of one directory are in name order.
+	// Symbolic links are listed as Other and not followed. A missing source
+	// returns an error wrapping ErrSourceNotFound; any other failure is
+	// returned as it is, with no partial listing.
+	//
+	// skip, if not nil, is called with the path of every entry below source,
+	// before a directory's contents are read. An entry for which it returns
+	// true is left out, and so is everything below it: that directory is
+	// never read.
+	Walk(ctx context.Context, source string, skip func(path string) bool) ([]Entry, error)
 	// Open opens a file for reading only. ctx stays bound to the file: once
 	// it is done, reads and Close fail with its error.
 	Open(ctx context.Context, path string) (File, error)
@@ -119,8 +125,8 @@ func kindOf(mode fs.FileMode) Kind {
 }
 
 // walk lists source in fsys for Session.Walk.
-func walk(ctx context.Context, fsys fs.FS, source string) ([]Entry, error) {
-	if !validPath(source) {
+func walk(ctx context.Context, fsys fs.FS, source string, skip func(string) bool) ([]Entry, error) {
+	if source != "." && !validPath(source) {
 		return nil, &fs.PathError{Op: "walk", Path: source, Err: fs.ErrInvalid}
 	}
 	var entries []Entry
@@ -151,6 +157,14 @@ func walk(ctx context.Context, fsys fs.FS, source string) ([]Entry, error) {
 		// such as ".." or "a/b" into a different path.
 		if !validName(d.Name()) {
 			return fmt.Errorf("listing %s: invalid name %q", source, d.Name())
+		}
+		// fs.WalkDir reads a directory only after this returns, so a
+		// skipped one is never read.
+		if skip != nil && skip(p) {
+			if d.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
 		}
 		info, err := d.Info()
 		if err != nil {

@@ -42,11 +42,11 @@ func NewFake(fsys fs.FS) *Fake {
 }
 
 // Walk lists source; see Session.
-func (f *Fake) Walk(ctx context.Context, source string) ([]Entry, error) {
+func (f *Fake) Walk(ctx context.Context, source string, skip func(string) bool) ([]Entry, error) {
 	if f.closed() {
 		return nil, &fs.PathError{Op: "walk", Path: source, Err: fs.ErrClosed}
 	}
-	return walk(ctx, f.fsys, source)
+	return walk(ctx, f.fsys, source, skip)
 }
 
 // Open opens path for reading; see Session.

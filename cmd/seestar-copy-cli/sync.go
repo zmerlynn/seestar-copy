@@ -408,7 +408,7 @@ func (s *syncer) decide(ctx context.Context, sess remote.Session) ([]plan.Decisi
 func (s *syncer) list(ctx context.Context, sess remote.Session) ([]plan.Entry, error) {
 	var listing []plan.Entry
 	for _, source := range s.opts.sources {
-		entries, err := sess.Walk(ctx, source)
+		entries, err := sess.Walk(ctx, source, nil)
 		if errors.Is(err, remote.ErrSourceNotFound) {
 			s.log.Warn("source not found", "source", source)
 			continue
