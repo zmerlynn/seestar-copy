@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/zmerlynn/seestar-copy/internal/remote"
 )
@@ -50,16 +51,21 @@ func newLog() (*slog.Logger, *logBuffer) {
 	return slog.New(slog.NewTextHandler(&b, nil)), &b
 }
 
-// spy is a Session over a Fake that counts every call.
+// spy is a Session over a Fake that counts every call. With block set to
+// "Open", "ReadDir" or "FileClose", that call ignores every context and
+// waits for the session's Close, as a call to a silent telescope does.
 type spy struct {
 	fake      *remote.Fake
-	ctx       context.Context                      // the dial's
+	ctx       context.Context // the dial's
+	block     string
+	openDelay time.Duration                        // each Open sleeps this long first, ignoring every context
 	seekFault func(offset int64, whence int) error // if not nil, each file Seek's error
 	done      chan struct{}
 	once      sync.Once
 
-	mu    sync.Mutex
-	calls map[string]int
+	mu       sync.Mutex
+	calls    map[string]int
+	closeCtx []error // the file context's error at each file Close
 }
 
 func (s *spy) count(name string) {
@@ -91,17 +97,26 @@ func (s *spy) Walk(ctx context.Context, skip func(string, bool) bool) ([]remote.
 
 func (s *spy) ReadDir(ctx context.Context, dir string) ([]remote.Entry, error) {
 	s.count("ReadDir")
+	if s.block == "ReadDir" {
+		<-s.done
+		return nil, fs.ErrClosed
+	}
 	return s.fake.ReadDir(ctx, dir)
 }
 
 func (s *spy) Open(ctx context.Context, p string) (remote.File, error) {
 	s.count("Open:" + p)
 	s.count("Open")
+	if s.block == "Open" {
+		<-s.done
+		return nil, fs.ErrClosed
+	}
+	time.Sleep(s.openDelay)
 	f, err := s.fake.Open(ctx, p)
 	if err != nil {
 		return nil, err
 	}
-	return &spyFile{File: f, s: s}, nil
+	return &spyFile{File: f, s: s, ctx: ctx}, nil
 }
 
 func (s *spy) Close() error {
@@ -112,7 +127,8 @@ func (s *spy) Close() error {
 
 type spyFile struct {
 	remote.File
-	s *spy
+	s   *spy
+	ctx context.Context
 }
 
 func (f *spyFile) Read(p []byte) (int, error) {
@@ -132,6 +148,12 @@ func (f *spyFile) Seek(offset int64, whence int) (int64, error) {
 
 func (f *spyFile) Close() error {
 	f.s.count("FileClose")
+	f.s.mu.Lock()
+	f.s.closeCtx = append(f.s.closeCtx, f.ctx.Err())
+	f.s.mu.Unlock()
+	if f.s.block == "FileClose" {
+		<-f.s.done
+	}
 	return f.File.Close()
 }
 
