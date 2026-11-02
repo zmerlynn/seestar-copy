@@ -31,11 +31,13 @@ var defaultExcludes = []string{
 type selectionFlags struct {
 	excludes          []string
 	noDefaultExcludes bool
+	includes          []string
 }
 
 func (f *selectionFlags) register(fs *pflag.FlagSet) {
 	fs.StringArrayVar(&f.excludes, "exclude", nil, "skip files and folders that match this pattern, as well as the built-in ones; repeatable")
 	fs.BoolVar(&f.noDefaultExcludes, "no-default-excludes", false, "do not skip what the built-in patterns match")
+	fs.StringArrayVar(&f.includes, "include", nil, "keep only files that match this pattern or are in a folder that does; excludes still win; repeatable")
 }
 
 // parse checks the flags, without touching the network or the disk.
@@ -52,12 +54,33 @@ func (f selectionFlags) parse() (selector, error) {
 		}
 		s.excludes = append(s.excludes, p)
 	}
+	for _, flag := range f.includes {
+		p, err := parsePattern("--include", flag)
+		if err != nil {
+			return selector{}, err
+		}
+		s.includes = append(s.includes, p)
+	}
 	return s, nil
 }
 
 // selector is a checked selection: what a walk of the share leaves out.
+// An entry that an exclude matches is skipped, whatever the includes say.
+// With includes, a file is kept only if one of them matches it or a folder
+// above it, and a folder is listed only if one of them could match it or
+// something below it.
 type selector struct {
 	excludes []pattern
+	includes []pattern
+}
+
+// leftOut is what a walk left out.
+type leftOut struct {
+	// skipped are the entries an exclude matched, in listing order.
+	skipped []skippedEntry
+	// unmatched counts the entries that no include could select and that
+	// no exclude matched. A folder counts once; what is in it is not listed.
+	unmatched int
 }
 
 // skippedEntry is a listed entry that an exclude matched.
@@ -68,25 +91,43 @@ type skippedEntry struct {
 }
 
 // walk lists the share over sess, leaving out what the selection does, and
-// returns what it kept and the entries it skipped, in listing order. A
-// skipped folder's contents are not listed. Any listing failure, of the
-// root or of a folder that is not skipped, fails the walk; the entries
-// skipped before it are still returned.
-func (s selector) walk(ctx context.Context, sess remote.Session) ([]remote.Entry, []skippedEntry, error) {
-	var skipped []skippedEntry
-	entries, err := sess.Walk(ctx, func(p string, _ bool) bool {
+// returns what it kept and what it left out. A folder left out is never
+// read. Any listing failure, of the root or of a folder that is kept, fails
+// the walk; what was left out before it is still returned.
+func (s selector) walk(ctx context.Context, sess remote.Session) ([]remote.Entry, leftOut, error) {
+	var out leftOut
+	entries, err := sess.Walk(ctx, func(p string, dir bool) bool {
 		for _, e := range s.excludes {
 			if e.match(p) {
-				skipped = append(skipped, skippedEntry{p, e})
+				out.skipped = append(out.skipped, skippedEntry{p, e})
 				return true
 			}
+		}
+		if !s.included(p, dir) {
+			out.unmatched++
+			return true
 		}
 		return false
 	})
 	if err != nil {
-		return nil, skipped, err
+		return nil, out, err
 	}
-	return entries, skipped, nil
+	return entries, out, nil
+}
+
+// included reports whether the includes keep p: with none, everything; a
+// file, if one matches it or a folder above it; a folder, if one could
+// match it or something below it.
+func (s selector) included(p string, dir bool) bool {
+	if len(s.includes) == 0 {
+		return true
+	}
+	for _, m := range s.includes {
+		if dir && m.mayMatchBelow(p) || !dir && m.matchWithin(p) {
+			return true
+		}
+	}
+	return false
 }
 
 // pattern is one checked selection pattern.
@@ -131,5 +172,34 @@ func (m pattern) match(p string) bool {
 		p = path.Base(p)
 	}
 	ok, _ := path.Match(m.pattern, strings.ToLower(p))
+	return ok
+}
+
+// matchWithin reports whether p, or a folder above it, matches.
+func (m pattern) matchWithin(p string) bool {
+	for {
+		if m.match(p) {
+			return true
+		}
+		i := strings.LastIndexByte(p, '/')
+		if i < 0 {
+			return false
+		}
+		p = p[:i]
+	}
+}
+
+// mayMatchBelow reports whether the folder dir, or something below it,
+// could match: that is, whether dir matches as many leading names of an
+// anchored pattern as it has, or as the pattern has, since * and ? never
+// cross a /. A name-only pattern could match at any depth.
+func (m pattern) mayMatchBelow(dir string) bool {
+	if !m.anchored {
+		return true
+	}
+	pat := strings.Split(m.pattern, "/")
+	names := strings.Split(strings.ToLower(dir), "/")
+	n := min(len(pat), len(names))
+	ok, _ := path.Match(strings.Join(pat[:n], "/"), strings.Join(names[:n], "/"))
 	return ok
 }
