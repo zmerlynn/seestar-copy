@@ -25,12 +25,11 @@ import (
 const maxWorkers = 64
 
 type syncOptions struct {
-	endpoint          string
-	dest              string
-	excludeFlags      []string
-	noDefaultExcludes bool
-	// excludes is set by validate from the two flags above.
-	excludes     []exclude
+	endpoint  string
+	dest      string
+	selection selectionFlags
+	// selector is set by validate from selection.
+	selector     selector
 	interval     time.Duration
 	intervalSet  bool
 	once         bool
@@ -78,8 +77,7 @@ failure or a --once or --dry-run pass with failed files, 2 on a usage error.`,
 	f := cmd.Flags()
 	f.StringVar(&o.endpoint, "endpoint", "", "SMB host:port of the telescope or a proxy (required)")
 	f.StringVar(&o.dest, "dest", "", "local mirror folder, created if missing (required)")
-	f.StringArrayVar(&o.excludeFlags, "exclude", nil, "skip files and folders that match this pattern, as well as the built-in ones; repeatable")
-	f.BoolVar(&o.noDefaultExcludes, "no-default-excludes", false, "do not skip what the built-in patterns match")
+	o.selection.register(f)
 	f.DurationVar(&o.interval, "interval", 5*time.Minute, "wait between the end of one pass and the start of the next")
 	f.BoolVar(&o.once, "once", false, "run one pass and exit")
 	f.BoolVar(&o.dryRun, "dry-run", false, "run one pass that only reports what it would do, and change nothing on disk")
@@ -101,11 +99,11 @@ func (o *syncOptions) validate() error {
 	if o.dest == "" {
 		return &usageError{Option: "--dest", Rule: "required; give the local mirror folder"}
 	}
-	excludes, err := parseExcludes(o.excludeFlags, o.noDefaultExcludes)
+	sel, err := o.selection.parse()
 	if err != nil {
 		return err
 	}
-	o.excludes = excludes
+	o.selector = sel
 	if o.interval <= 0 {
 		return &usageError{Option: "--interval", Rule: "must be more than zero"}
 	}
@@ -436,23 +434,13 @@ type selection struct {
 	folders []string
 }
 
-type skippedEntry struct {
-	path string
-	by   exclude
-}
-
 // list lists the whole share, leaving out what the excludes match. Any
 // listing failure, of the root or of a folder that is not excluded, fails
 // the pass; the returned selection then holds the entries skipped before it.
 func (s *syncer) list(ctx context.Context, sess remote.Session) ([]plan.Entry, selection, error) {
 	var sel selection
-	entries, err := sess.Walk(ctx, func(p string, _ bool) bool {
-		e, ok := excluded(s.opts.excludes, p)
-		if ok {
-			sel.skipped = append(sel.skipped, skippedEntry{p, e})
-		}
-		return ok
-	})
+	entries, skipped, err := s.opts.selector.walk(ctx, sess)
+	sel.skipped = skipped
 	if err != nil {
 		return nil, sel, fmt.Errorf("list the share: %w", err)
 	}

@@ -44,7 +44,7 @@ func TestExcludeMatch(t *testing.T) {
 		{"Café.FIT", []string{"CAFÉ.fit"}, []string{"Cafe\u0301.fit"}},
 		{"ς", nil, []string{"Σ"}},
 	} {
-		e, err := parseExclude(tc.pattern)
+		e, err := parsePattern("--exclude", tc.pattern)
 		if err != nil {
 			t.Errorf("%q: %v", tc.pattern, err)
 			continue
@@ -72,13 +72,13 @@ func TestExcludeParseErrors(t *testing.T) {
 		"M[42]", "[", `MyWorks\x`, `\`,
 		"**", "a**", "MyWorks/**/x",
 	} {
-		if e, err := parseExclude(p); err == nil {
+		if e, err := parsePattern("--exclude", p); err == nil {
 			t.Errorf("%q: accepted as %+v", p, e)
 		}
 	}
 	// Spaces are kept, not trimmed.
 	for _, p := range []string{" log", "log ", "/log "} {
-		e, err := parseExclude(p)
+		e, err := parsePattern("--exclude", p)
 		if err != nil || e.match("log") || !e.match(strings.TrimPrefix(p, "/")) {
 			t.Errorf("%q: %+v, %v; want spaces kept", p, e, err)
 		}
@@ -348,7 +348,7 @@ func checkLines(t *testing.T, log, key string, want []string) {
 // built-in list behaves exactly as the defaults, in a dry run and in a real
 // pass, wherever --no-default-excludes is given.
 func TestDefaultsEqualLiteralFlags(t *testing.T) {
-	builtIn, err := parseExcludes(nil, false)
+	builtIn, err := selectionFlags{}.parse()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -356,8 +356,8 @@ func TestDefaultsEqualLiteralFlags(t *testing.T) {
 	for i := 1; i < len(literalDefaultFlags); i += 2 {
 		values = append(values, literalDefaultFlags[i])
 	}
-	literal, err := parseExcludes(values, true)
-	if err != nil || !slices.Equal(builtIn, literal) {
+	literal, err := selectionFlags{excludes: values, noDefaultExcludes: true}.parse()
+	if err != nil || !slices.Equal(builtIn.excludes, literal.excludes) {
 		t.Errorf("literal flags parse to %+v, %v; want the built-in %+v", literal, err, builtIn)
 	}
 
