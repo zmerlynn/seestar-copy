@@ -43,10 +43,13 @@ Once listening, browse prints one line to stdout, the page's URL, and
 serves until Ctrl+C. --open also opens that URL in the default browser.
 --listen takes an IP address and a port, never a host name; port 0 picks a
 free port. An IPv4-mapped IPv6 address, such as [::ffff:192.168.1.5]:0, and
-an address with a zone, such as [fe80::1%en0]:0, are refused: give the
-plain IPv4 address, or one without a zone. The default serves this computer
-only. Any other address, 0.0.0.0 or :: included, serves the share without
-a password to anyone who can reach it, and browse logs a warning.
+an address with a zone, such as [fe80::1%en0]:0, are refused. Use the plain
+IPv4 address for a mapped address. An IPv6 address with a zone is not
+supported; choose another address, such as [::1]:0 or an available IPv4
+address. Loopback addresses, such as the default, serve this computer only.
+A non-loopback address, including 0.0.0.0 or ::, serves the share without a
+password to anyone who can reach it, and browse logs a warning when it
+starts.
 browse never writes: not to the telescope, not to --dest, not to the state.
 Logs and errors go to stderr.
 Exit 0 when stopped by Ctrl+C, 1 when it cannot start or keep serving, 2 on

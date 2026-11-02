@@ -869,12 +869,14 @@ Browse has no selection: it shows the whole share, and `--exclude`,
 `--listen` takes an IP address and a port, such as `127.0.0.1:0`,
 `[::1]:8080`, `192.168.1.5:0` or `0.0.0.0:0`, never a host name, not even
 `localhost`. An IPv4-mapped IPv6 address, such as `[::ffff:192.168.1.5]:0`,
-and an address with a zone, such as `[fe80::1%en0]:0`, are refused too: give
-the plain IPv4 address, or one without a zone.
+and an address with a zone, such as `[fe80::1%en0]:0`, are refused too. Use
+the plain IPv4 address for a mapped address. An IPv6 address with a zone is
+not supported; choose another address, such as `[::1]:0` or an available IPv4
+address.
 
-The default serves this computer only. Any other address, `0.0.0.0` and `::`
-included, serves the share without a password to anyone on the network who
-can reach that address, and browse logs a WARN line,
+Loopback addresses, such as the default, serve this computer only. A
+non-loopback address, including `0.0.0.0` or `::`, serves the share without a
+password to anyone who can reach it, and browse logs a WARN line,
 `serving the share unauthenticated to the network`, when it starts.
 
 All flags are checked before anything touches the network or the disk, and a
