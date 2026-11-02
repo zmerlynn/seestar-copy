@@ -144,7 +144,7 @@ function row(e) {
     img.src = fileURL(e.thumb);
     thumb.append(img);
   }
-  const nameCell = el('td');
+  const nameCell = el('td', undefined, 'name');
   if (!file) {
     nameCell.append(folderLink(e.path, name + '/'));
   } else if (e.view) {

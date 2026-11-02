@@ -5,12 +5,14 @@ header { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: baseline
 h1 { font-size: 1.1rem; margin: 0; }
 #endpoint { font-family: ui-monospace, monospace; }
 .note { color: #555; }
-nav { margin: 0.75rem 0; }
+nav { margin: 0.75rem 0; overflow-wrap: anywhere; }
 a { color: #0b57d0; }
+.scroll { max-width: 100%; overflow-x: auto; }
 table { border-collapse: collapse; width: 100%; }
 th, td { text-align: left; padding: 0.25rem 0.5rem; border-bottom: 1px solid #eee; vertical-align: middle; }
 th { font-weight: 600; border-bottom-color: #ccc; }
 .num { text-align: right; white-space: nowrap; }
+td.name { overflow-wrap: anywhere; }
 td.thumb { width: 48px; padding: 2px; }
 td.thumb img { width: 48px; height: 48px; object-fit: cover; display: block; }
 td.thumb img.open { cursor: pointer; }
