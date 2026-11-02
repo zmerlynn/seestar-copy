@@ -14,6 +14,9 @@ log line. The [README](../README.md) has a first run.
 - [Windows](#windows)
 - [find](#find): listing the share, its [text](#text-format) and
   [JSONL](#jsonl-format) formats, and [statuses](#statuses)
+- [delete](#delete): [proof modes](#proof-modes),
+  [how delete decides](#how-delete-decides), [emptied folders](#emptied-folders)
+  and [the check-then-remove race](#the-check-then-remove-race)
 - [licenses](#licenses)
 - [Global command behavior](#global-command-behavior)
 - [Verifying a release](#verifying-a-release)
@@ -533,7 +536,8 @@ Flag values are never echoed in it.
 Without `--once` or `--dry-run`, failed passes and failed files do not end
 sync: it logs them and tries again on the next pass.
 
-For `find`, see [find exit codes](#find-exit-codes).
+For `find`, see [find exit codes](#find-exit-codes); for `delete`, see
+[delete exit codes](#delete-exit-codes).
 
 ## Names that fail
 
@@ -769,6 +773,217 @@ time=2026-11-09T09:00:01.502Z level=INFO msg="listing done" files=212 folders=9 
 | 0 | The listing is complete. |
 | 1 | The state could not be read, the connection or a listing failed (`connect to ...` or `list the share: ...`), the output could not be written, or a signal stopped find before it wrote the whole listing. |
 | 2 | A usage error: an unknown or invalid flag, a missing `--endpoint`, a bad `--format` or `--older-than`, an empty `--dest` or `--state-dir`, `--state-dir` without `--dest`, or a positional argument. |
+
+## delete
+
+```sh
+seestar-copy-cli delete --endpoint HOST:PORT --dest DIR [--force] [flags]
+seestar-copy-cli delete --endpoint HOST:PORT --dest DIR --trust-state [--force] [flags]
+seestar-copy-cli delete --endpoint HOST:PORT --ignore-state --include PAT [--force] [flags]
+```
+
+Deletes files from the telescope's share once they are copied, then removes
+the folders the run emptied. It runs once, one file at a time.
+
+delete is the only command that changes the telescope's share. Without
+`--force` it only previews: it lists the share, logs what it would delete,
+and changes nothing, exactly as `--dry-run` does. With `--force` it deletes,
+and does not ask first. `--force` only means "act": it never skips or
+weakens the proof. `--trust-state` and `--ignore-state` are the only ways to
+ask for less proof.
+
+```sh
+seestar-copy-cli delete --endpoint 127.0.0.1:4445 --dest ~/Seestar
+seestar-copy-cli delete --endpoint 127.0.0.1:4445 --dest ~/Seestar --force
+seestar-copy-cli delete --endpoint 127.0.0.1:4445 --ignore-state --include '*.jpg' --older-than 30d --force
+```
+
+**Do not run delete while the telescope is capturing, restacking, or
+managing files in its app.** See [the check-then-remove race](#the-check-then-remove-race).
+
+### delete flags
+
+| Flag | Default | Meaning |
+| --- | --- | --- |
+| `--endpoint` | none; required | As for sync. See [endpoint](#endpoint). |
+| `--dest` | none; required, except with `--ignore-state`, which refuses it | The destination whose [state](#the-state-file), and by default whose local copies, prove that a file was copied. It is never created. It must be the destination of **this** telescope; see [what the proof does not show](#what-the-proof-does-not-show). |
+| `--state-dir` | as for sync | The folder that holds the state file of `--dest`; see [location](#location). Refused with `--ignore-state`, and it must not be empty when given. |
+| `--trust-state` | off | Prove a file by its state record alone, without reading the local copy. Use it when the copies were moved out of `--dest` or the drive is offline. |
+| `--ignore-state` | off | Read no state, and delete every selected file that is old enough, whether or not it was copied. Needs at least one `--include`. |
+| `--older-than` | `7d` | Delete only files whose device mtime is at least this old. The grammar is find's: a Go duration, such as `36h`, or a whole number of days, such as `7d`, not both, and not negative. `0` is no age limit. |
+| `--exclude`, `--no-default-excludes`, `--include` | as for sync | The same [selection](#selection) as sync, with the same built-in patterns. |
+| `--force` | off | Delete. Without it, delete only previews. |
+| `--dry-run` | off | Only preview, as delete does without `--force`. Refused with `--force`. |
+
+`--trust-state` and `--ignore-state` cannot be combined. All flags are
+checked before anything touches the network or the disk, and a bad one exits
+2.
+
+Requiring an `--include` with `--ignore-state` makes the selection explicit;
+it does not make it narrow. `--include /MyWorks` selects that whole folder.
+There is no cap and no list of protected names.
+
+### Proof modes
+
+| Mode | Flags | A file is deleted when |
+| --- | --- | --- |
+| `hash` | the default | the state records its path with the size and mtime the device lists, and the local copy in `--dest` is a regular file of the recorded size whose SHA-256 is the recorded one. |
+| `state` | `--trust-state` | the state records its path with the size and mtime the device lists. The local copy is not read. |
+| `none` | `--ignore-state` | it is selected. No state is read. |
+
+In every mode the file must also be old enough for `--older-than`, and
+unchanged on the device just before it is removed.
+
+In `hash` mode, a missing `--dest` is a runtime error before delete connects:
+
+```text
+destination not found; give --trust-state if the copies were moved or the drive is offline
+```
+
+### How delete decides
+
+Delete lists the share as a sync pass does, then goes through the listing in
+reverse, so it reaches each folder after everything in it. For each regular
+file, the first check that fails decides; the file is then **kept**, which
+is an outcome, not a failure:
+
+| # | Check | Modes | If it fails |
+| --- | --- | --- | --- |
+| 1 | The path is one the share would receive exactly: no backslash, and no empty, `.` or `..` name. | all | WARN `file kept`, `the share would not receive this name exactly` |
+| 2 | No other listed path, and in `hash` and `state` modes no recorded path, is the same name in another case or Unicode normalization; see [name clashes](#name-clashes). | all | WARN `file kept`, with the `name clash: ...` reason |
+| 3 | The file is at least `--older-than` old. With a positive limit, a file whose mtime is in the future is kept; `--older-than 0` turns the age check off, future mtimes included. | all | counted in `recent`, with no line |
+| 4 | The state has a record for exactly this path. | `hash`, `state` | INFO `file kept`, `not in the state` |
+| 5 | The device's size and mtime equal the record. | `hash`, `state` | WARN `file kept`, `changed on the device since it was copied` |
+| 6 | The local copy exists. | `hash` | INFO `file kept`, `local copy missing; give --trust-state if it was moved` |
+| 7 | The local copy is a regular file of the recorded size. | `hash` | WARN `file kept`, `local copy is not a regular file` or `local copy size differs from the state` |
+| 8 | The local copy's SHA-256 is the recorded one. | `hash` | WARN `file kept`, `local copy's SHA-256 differs from the state` |
+| 9 | Just before removing it, the device still lists a regular file with the same size and mtime. | all | WARN `file kept`, `changed on the device during this run`, or INFO `file kept`, `no longer on the device` |
+
+A local copy that cannot be read (an I/O or permission error) fails that
+file with a `file failed` line, and the run goes on. Entries that are neither
+regular files nor folders, such as links, are never touched.
+
+A preview stops before check 9 and logs `would delete` for each file that
+passes checks 1 to 8. On a share that does not change, a run with `--force`
+then deletes exactly those files.
+
+### What the proof does not show
+
+- **The contents on the device.** Equal size and mtime do not prove equal
+  contents. A rewrite on the device that keeps both is not noticed. Delete
+  does not read device files, which would double the reads.
+- **Which telescope this is.** The state names only the destination, not the
+  telescope. **Use one destination per telescope.** If one telescope's
+  destination is given while delete talks to another, a file at the same
+  path with the same size and mtime can be deleted before it was ever copied,
+  even in `hash` mode, since the local copy only proves the other telescope's
+  file. `--trust-state` cannot catch this at all.
+- **Adopted files.** An `adopted` record hashed the local file only; it never
+  read the device. Its proof is as good as the copy it adopted.
+
+### Emptied folders
+
+A folder is removed when it held entries before the run and this run removed
+every one of them. Anything the selection left out of the listing, and any
+file or folder the run kept, keeps its folder. A folder that was already
+empty stays, and the share root is never removed. `MyWorks` itself can be
+removed when everything under it is deleted; the telescope makes it again.
+
+If something is added to a folder after the listing, the share refuses to
+remove it, and delete logs `folder kept` with the reason
+`not empty: something was added during the run`.
+
+### The check-then-remove race
+
+Delete checks each file on the device just before it removes it (check 9),
+but the check and the removal are separate requests by name. If the
+telescope rewrites the file between them, for example by restacking an old
+target, delete removes the new bytes. They were never copied, and nothing can
+bring them back. This holds in every mode, and `--older-than` does not
+prevent it, because a restack can rewrite an old file. A folder can likewise
+be removed if it is made again, empty, at the same path between its check and
+its removal.
+
+To remove a file or folder that the share marks read-only, delete may first
+clear that read-only attribute; if the removal then fails, the attribute can
+stay cleared.
+
+Delete cannot tell what the telescope is doing. So: do not run delete while
+the telescope is capturing, restacking, or managing files in its app.
+
+### delete and sync
+
+Delete takes no [lock](#lock) and never writes the state file, so it can run
+while a sync uses the same destination. It reads the state as a sync
+[dry run](#dry-run) does: a torn final line is logged and ignored. A file
+deleted from the device stays recorded, so the next pass neither copies nor
+fails it. A new file the telescope later writes at that path has a new mtime,
+and sync replaces the old copy.
+
+- Do not edit or replace files in `--dest` while delete runs. Delete hashes
+  the file it opens, and nothing more.
+- With `--ignore-state`, delete does not know what sync still needs. Run it
+  while sync is not copying, or exclude what sync has not copied yet.
+
+### Stopping a delete
+
+Ctrl+C (SIGINT) or SIGTERM stops delete between files. It logs
+`deletion stopped` and exits 0. Nothing is recorded, so there is nothing to
+repair; run it again to carry on. A folder that the stopped run emptied is
+then already empty, so a later run leaves it. Remove it by hand if you want
+it gone.
+
+### delete logs
+
+Delete logs to stderr as sync does. A run with `--force`:
+
+```text
+time=2026-11-09T09:00:00.010Z level=INFO msg="deletion starting" proof=hash older_than=7d dry_run=false
+time=2026-11-09T09:00:02.410Z level=INFO msg="file deleted" path="MyWorks/M 31/Light_M 31_10.0s_IRCUT_20261029-033119.fit" size=16594560
+time=2026-11-09T09:00:02.470Z level=WARN msg="file kept" path="MyWorks/M 31/Stacked_M 31.fit" reason="changed on the device since it was copied"
+time=2026-11-09T09:00:02.530Z level=INFO msg="folder removed" path="MyWorks/M 31_sub"
+time=2026-11-09T09:00:02.600Z level=INFO msg="deletion done" deleted=212 bytes=3518046720 folders=1 kept=1 recent=40 failed=0 skipped=3 unmatched=0 elapsed=2.59s
+```
+
+A preview logs `would delete` (with `path` and `size`) and
+`would remove folder` instead, `would skip` for each excluded file or folder,
+a `dry run done` summary, and then:
+
+```text
+time=2026-11-09T09:00:02.600Z level=INFO msg="preview only; add --force to delete"
+```
+
+| Message | Meaning |
+| --- | --- |
+| `deletion starting` | The proof mode, the age limit and whether this is a preview (`dry_run`). |
+| `file deleted`, `folder removed` | Removed from the device. |
+| `file kept`, `folder kept` | Not removed, with the reason; see [how delete decides](#how-delete-decides). |
+| `file failed`, `folder failed` | A failure, with the reason. |
+| `skipped` | As in a pass: an excluded file or folder. |
+| `deletion done`, `deletion stopped`, `deletion failed` | The summary. A preview's is `dry run done`, `dry run stopped` or `dry run failed`. |
+
+| Summary key | Meaning |
+| --- | --- |
+| `deleted` (preview: `delete`) | Files deleted. |
+| `bytes` | Their sizes. |
+| `folders` (preview: `remove_folders`) | Folders removed. |
+| `kept` | Files kept, each with its own `file kept` line. |
+| `recent` | Files younger than `--older-than`. |
+| `failed` | Files and folders that failed. |
+| `skipped`, `unmatched` | As in a pass. |
+| `elapsed` | The time the run took. |
+
+### delete exit codes
+
+| Code | Meaning |
+| --- | --- |
+| 0 | The run or preview finished with no failed file, however many it kept; or a signal stopped it. |
+| 1 | The state could not be read; `--dest` is missing in `hash` mode; the connection or listing failed (`connect to ...` or `list the share: ...`); a removal failed on the device, which ends the run (`deletion failed`); or a local copy could not be read (`failed files: N`). A rerun lists the share again and carries on. |
+| 2 | A usage error: an unknown or invalid flag, a missing `--endpoint`, `--dest` missing without `--ignore-state`, `--trust-state` with `--ignore-state`, `--ignore-state` without `--include` or with `--dest` or `--state-dir`, `--force` with `--dry-run`, a bad `--older-than`, an empty `--state-dir`, or a positional argument. |
+
+> **Warning.** With `--ignore-state`, delete removes whatever is selected,
+> whether or not it was copied. With `--older-than 0` as well, that includes
+> a file the telescope is still writing. Preview first, without `--force`.
 
 ## licenses
 

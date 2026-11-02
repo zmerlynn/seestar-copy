@@ -18,10 +18,15 @@ the release workflow from an annotated tag.
 
 The [command reference](reference.md) has the detail of each item.
 
-1. **Commands and flags.** `sync`, `find`, `licenses`, `help` and the top-level `--version`; flag names, meanings
-   and grammar; the defaults of every `sync` and `find` flag, as in [flags](reference.md#flags) and
-   [find flags](reference.md#find-flags); and the rules about which values are refused. `--older-than` takes a Go
-   duration or a whole number of days such as `7d`, not both. A new flag whose default keeps the old behavior is
+1. **Commands and flags.** `sync`, `find`, `delete`, `licenses`, `help` and the top-level `--version`; flag names,
+   meanings and grammar; the defaults of every `sync`, `find` and `delete` flag, as in [flags](reference.md#flags),
+   [find flags](reference.md#find-flags) and [delete flags](reference.md#delete-flags), including delete's
+   `--older-than` default of `7d`; and the rules about which values are refused. `--older-than` takes a Go
+   duration or a whole number of days such as `7d`, not both, for find and delete alike. For delete:
+   `--trust-state` and `--ignore-state` cannot be combined; `--ignore-state` needs at least one `--include` and
+   refuses `--dest` and `--state-dir`; without `--force`, delete only previews, as `--dry-run` does, and `--force`
+   with `--dry-run` is refused. `--force` only means "act": it never skips or weakens the proof, and
+   `--trust-state` and `--ignore-state` are the only ways to ask for less. A new flag whose default keeps the old behavior is
    additive. The [selection](reference.md#selection), the same for sync and find: the whole share except what an
    exclude pattern matches; the built-in patterns are exactly the listed `--exclude` flags, and adding, removing or
    changing one is breaking;
@@ -33,10 +38,24 @@ The [command reference](reference.md) has the detail of each item.
    setting is a flag. The default `--state-dir` comes from the operating system's per-user config folder, as in
    [location](reference.md#location). Adding opt-in configuration later is additive and must not override explicit
    flags.
-3. **Exit codes.** 0, 1 and 2, as in [exit codes](reference.md#exit-codes), and which outcome maps to which code.
-4. **What sync and find do to the device.** They only read: they never create, change, rename, delete or lock
-   anything on the share. They log in as guest to the share `EMMC Images`. A release in which either writes to the
-   device in any way is not a compatible release.
+3. **Exit codes.** 0, 1 and 2, as in [exit codes](reference.md#exit-codes),
+   [find exit codes](reference.md#find-exit-codes) and [delete exit codes](reference.md#delete-exit-codes), and which
+   outcome maps to which code. For delete, kept files never change the exit code.
+4. **What the commands do to the device.** Every command logs in as guest to the share `EMMC Images`. `sync` and
+   `find` only read: they never create, change, rename, delete or lock anything on the share. `delete` is the only
+   command that changes the share. It removes regular files that pass its proof mode and folders that the same run
+   emptied, and never the share root. It never writes file contents, and never creates, renames or locks anything.
+   To remove a file or folder that the share marks read-only, it may first clear that read-only attribute. The
+   attribute can stay cleared if the removal then fails. A release in which `sync` or `find` changes the device, or
+   in which `delete` does more than this, is breaking.
+
+   The [proof modes](reference.md#proof-modes): by default a file is removed only when the state records its path
+   with the size and mtime the device lists and the local copy's SHA-256 is the recorded one; with `--trust-state`
+   the record is enough; with `--ignore-state` every selected file is. In every mode the file must be at least
+   `--older-than` old and unchanged on the device just before removal, and a path the share would not receive
+   exactly, or a [name clash](reference.md#name-clashes), keeps it. Without `--force`, delete changes nothing. A
+   folder is removed only when it held entries before the run and the run removed every one of them, as in
+   [emptied folders](reference.md#emptied-folders).
 5. **The destination.** The [layout](reference.md#destination-layout): files mirror the share's tree under
    `--dest` with names kept byte for byte; downloaded files get the device's mtime, adopted files keep their own,
    which is within the adoption tolerance in the decision rules; and folders' mtimes are not set. The
@@ -56,7 +75,7 @@ The [command reference](reference.md) has the detail of each item.
    older one: a new member is optional, older releases ignore it, and readers treat an unknown `how` as unknown. A
    format that an older release cannot read gets a new `v`, and is breaking. Only one sync using the same
    destination spelling and state directory runs at a time; use the same values for every invocation. The lock
-   files' names are not promised.
+   files' names are not promised. delete never writes the state file, and takes no lock.
 8. **Distribution.** `<version>` below is the release's tag, such as `v0.1.0`. Linux archives are named
    `seestar-copy_<version>_linux_<arch>.tar.gz` and Windows archives `seestar-copy_<version>_windows_<arch>.zip`,
    for amd64 and arm64. Each contains `seestar-copy-cli` (with `.exe` on Windows), LICENSE and NOTICE at the archive
