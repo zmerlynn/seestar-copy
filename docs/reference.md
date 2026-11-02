@@ -895,8 +895,8 @@ A file's preview is the telescope's own small image: for a file `S.ext`,
 `S_thn.jpg` in the same folder if there is one, and otherwise `S.jpg`. Browse
 renders no FITS image, plays no video and processes no image.
 
-Clicking a file opens a viewer with its own Save link for these names,
-matched in any case:
+Clicking the name or the preview of a file opens a viewer with its own Save
+link for these names, matched in any case:
 
 | Name ends in | Clicking it shows |
 | --- | --- |

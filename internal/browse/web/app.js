@@ -156,6 +156,13 @@ function row(e) {
       view(e, name);
     });
     nameCell.append(a);
+    // The preview opens the viewer too, for the mouse only: the name is
+    // the keyboard's way in.
+    const img = thumb.firstChild;
+    if (img) {
+      img.className = 'open';
+      img.addEventListener('click', () => view(e, name));
+    }
   } else {
     nameCell.textContent = name;
   }
@@ -216,6 +223,14 @@ async function load(p) {
 const current = () => new URLSearchParams(location.search).get('path') || '';
 
 $('vclose').addEventListener('click', () => viewer.close());
+// A click on the backdrop targets the dialog itself, whose content all sits
+// in #vbody. Pressing inside and releasing outside, as when selecting text,
+// does not count.
+let pressedBackdrop = false;
+viewer.addEventListener('pointerdown', (ev) => { pressedBackdrop = ev.target === viewer; });
+viewer.addEventListener('click', (ev) => {
+  if (pressedBackdrop && ev.target === viewer) viewer.close();
+});
 viewer.addEventListener('close', () => {
   if (viewing) viewing.abort();
   viewed.removeAttribute('src');
