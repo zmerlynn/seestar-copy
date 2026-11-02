@@ -44,8 +44,10 @@ notes carry it.
 - [ ] Ask the owner for a device check of the rehearsal's linux/arm64 CLI. It
   is read-only and only the owner runs it; never point the tool at a
   telescope yourself. It covers a `--once` pass into a new destination, the
-  copied files' hashes against the device, a second `--once` that adopts
-  rather than downloads, and a stop with Ctrl+C mid-pass.
+  copied files' hashes against the device, a second `--once` after removing
+  only the test destination's state file (as the reference describes for a
+  reset), so it adopts rather than downloads, and a stop with Ctrl+C
+  mid-pass.
 - [ ] If the build changes after the check (step 1 starts again with a new
   SHA), the check is repeated unless the owner says the change cannot affect
   it.
