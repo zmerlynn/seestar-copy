@@ -59,6 +59,11 @@ one with a / is a path from the share root, and a leading / is optional.
 with everything in it. Unless --no-default-excludes is given, sync also
 skips what these flags would:
 ` + defaultExcludeFlags() + `
+With --include, sync copies only files that an --include pattern matches, or
+that are in a folder one matches; --include '/MyWorks' copies that folder and
+--include '*.jpg' JPEG files anywhere. Excludes always win, whatever the order:
+--include x --exclude x selects nothing, and no include brings back what an
+exclude skips.
 Durations use Go units, such as 30s, 5m or 1h30m.
 Logs and errors go to stderr; help goes to stdout.
 Exit 0 when stopped or after a clean --once or --dry-run pass, 1 on a runtime
@@ -257,16 +262,17 @@ type syncer struct {
 	firstPass bool
 }
 
-// pass runs one pass, logs a line for each entry an exclude skipped and its
-// summary, and returns how many files failed. An error means the session or
-// a listing failed, and nothing was copied.
+// pass runs one pass, logs a line for each entry an exclude skipped and a
+// summary, which also counts what the includes left out, and returns how
+// many files failed. An error means the session or a listing failed, and
+// nothing was copied.
 func (s *syncer) pass(ctx context.Context) (failed int, err error) {
 	start := time.Now()
-	var copied, replaced, adopted, waiting, skipped int
+	var copied, replaced, adopted, waiting, skipped, unmatched int
 	var bytes int64
 	defer func() {
 		args := []any{"copied", copied, "replaced", replaced, "adopted", adopted, "waiting", waiting,
-			"failed", failed, "skipped", skipped, "bytes", bytes, "elapsed", time.Since(start).Round(time.Millisecond)}
+			"failed", failed, "skipped", skipped, "unmatched", unmatched, "bytes", bytes, "elapsed", time.Since(start).Round(time.Millisecond)}
 		switch {
 		case ctx.Err() != nil:
 			s.log.Info("pass stopped", args...)
@@ -285,7 +291,7 @@ func (s *syncer) pass(ctx context.Context) (failed int, err error) {
 	defer sess.Close()
 	// A failed listing still logs and counts what it skipped before failing.
 	decisions, counts, sel, err := s.decide(ctx, sess)
-	skipped = len(sel.skipped)
+	skipped, unmatched = len(sel.skipped), sel.unmatched
 	for _, x := range sel.skipped {
 		s.log.Info("skipped", "path", x.path, "exclude", x.by.flag)
 	}
@@ -334,7 +340,7 @@ func (s *syncer) dryPass(ctx context.Context) (failed int, err error) {
 	var bytes int64
 	defer func() {
 		args := []any{"copy", counts.Copy, "replace", counts.Replace, "adopt", counts.Adopt, "waiting", counts.Wait,
-			"failed", counts.Fail, "skipped", len(sel.skipped), "bytes", bytes, "elapsed", time.Since(start).Round(time.Millisecond)}
+			"failed", counts.Fail, "skipped", len(sel.skipped), "unmatched", sel.unmatched, "bytes", bytes, "elapsed", time.Since(start).Round(time.Millisecond)}
 		switch {
 		case ctx.Err() != nil:
 			s.log.Info("dry run stopped", args...)
@@ -390,8 +396,8 @@ func (s *syncer) dryPass(ctx context.Context) (failed int, err error) {
 }
 
 // decide lists the share over sess and returns the pass decisions, their
-// counts and what the excludes left out. It logs a line for each file that
-// fails. If the listing fails, it returns only what the excludes left out
+// counts and what the selection left out. It logs a line for each file that
+// fails. If the listing fails, it returns only what the selection left out
 // before the failure.
 func (s *syncer) decide(ctx context.Context, sess remote.Session) ([]plan.Decision, plan.Counts, selection, error) {
 	listing, sel, err := s.list(ctx, sess)
@@ -427,20 +433,17 @@ func (s *syncer) decide(ctx context.Context, sess remote.Session) ([]plan.Decisi
 
 // selection is what one listing left out, and its top-level folders.
 type selection struct {
-	// skipped are the entries an exclude matched, with the first that did,
-	// in listing order. A skipped folder's contents are not listed.
-	skipped []skippedEntry
+	leftOut
 	// folders are the listed top-level folders.
 	folders []string
 }
 
-// list lists the whole share, leaving out what the excludes match. Any
-// listing failure, of the root or of a folder that is not excluded, fails
-// the pass; the returned selection then holds the entries skipped before it.
+// list lists the whole share, leaving out what the selection does. Any
+// listing failure, of the root or of a folder that is kept, fails the pass;
+// the returned selection then holds what was left out before it.
 func (s *syncer) list(ctx context.Context, sess remote.Session) ([]plan.Entry, selection, error) {
-	var sel selection
-	entries, skipped, err := s.opts.selector.walk(ctx, sess)
-	sel.skipped = skipped
+	entries, out, err := s.opts.selector.walk(ctx, sess)
+	sel := selection{leftOut: out}
 	if err != nil {
 		return nil, sel, fmt.Errorf("list the share: %w", err)
 	}
