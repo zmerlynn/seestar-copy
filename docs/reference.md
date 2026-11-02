@@ -285,7 +285,8 @@ moved away.
 
 Only one sync at a time may use a destination. Sync holds an exclusive OS
 lock on `<sha256>.lock`, next to the state file, while it runs. A second sync
-for the same destination exits 1:
+for the same destination, spelled the same way and with the same
+`--state-dir`, exits 1:
 
 ```text
 destination /home/user/Seestar: another sync is using this destination (lock file .../sync/<sha256>.lock)

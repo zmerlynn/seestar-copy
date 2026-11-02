@@ -45,8 +45,9 @@ The [command reference](reference.md) has the detail of each item.
    (`copied`, `replaced` or `adopted`); the last record for a path wins; a record is written only after its file is
    complete under its final name. A state file written by a newer release on the same major version loads in an
    older one: a new member is optional, older releases ignore it, and readers treat an unknown `how` as unknown. A
-   format that an older release cannot read gets a new `v`, and is breaking. One sync at a time per destination is
-   promised; the lock files' names are not.
+   format that an older release cannot read gets a new `v`, and is breaking. Only one sync using the same
+   destination spelling and state directory runs at a time; use the same values for every invocation. The lock
+   files' names are not promised.
 8. **Distribution.** `<version>` below is the release's tag, such as `v0.1.0`. Linux archives are named
    `seestar-copy_<version>_linux_<arch>.tar.gz` and Windows archives `seestar-copy_<version>_windows_<arch>.zip`,
    for amd64 and arm64. Each contains `seestar-copy-cli` (with `.exe` on Windows), LICENSE and NOTICE at the archive

@@ -101,8 +101,9 @@ code.
   every time, such as `--dest ~/Seestar`. Another spelling, such as through a
   link, starts a separate history; sync refuses to start when it notices. See
   [one spelling per destination](docs/reference.md#one-spelling-per-destination).
-- **One sync per folder.** A second sync for the same folder exits with an
-  error. For a second telescope, use a second folder.
+- **One sync per folder.** A second sync for the same folder, spelled the
+  same way and with the same `--state-dir`, exits with an error. For a second
+  telescope, use a second folder.
 - **Partial files are hidden.** A file being copied is written under a hidden
   temporary name next to where it will go, so nothing that watches for `.fit`
   files sees half a file. See
