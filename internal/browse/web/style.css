@@ -1,4 +1,5 @@
 [hidden] { display: none !important; }
+:root { color-scheme: light dark; }
 body { font: 14px/1.4 system-ui, sans-serif; margin: 0 1rem 2rem; color: #1b1b1b; background: #fff; }
 header { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: baseline; padding: 0.75rem 0; border-bottom: 1px solid #ddd; }
 h1 { font-size: 1.1rem; margin: 0; }
@@ -24,6 +25,8 @@ dialog pre { max-width: calc(95vw - 2rem); max-height: calc(95vh - 6rem); overfl
 #vnote:empty { display: none; }
 dialog p { margin: 0.5rem 0 0; display: flex; gap: 1rem; align-items: center; }
 #vname { flex: 1; overflow-wrap: anywhere; }
+.btn { font: inherit; color: inherit; text-decoration: none; padding: 0.2em 0.8em; border: 1px solid #767676; border-radius: 0.3rem; background: #f0f0f0; cursor: pointer; }
+.btn:focus-visible { outline: 2px solid #0b57d0; outline-offset: 2px; }
 @media (prefers-color-scheme: dark) {
   body { color: #e6e6e6; background: #161616; }
   .note { color: #aaa; }
@@ -32,4 +35,6 @@ dialog p { margin: 0.5rem 0 0; display: flex; gap: 1rem; align-items: center; }
   .badge.copied { color: #7fd18b; }
   .badge.changed { color: #f2b45a; }
   dialog { color: inherit; background: #222; }
+  .btn { background: #333; border-color: #888; }
+  .btn:focus-visible { outline-color: #8ab4f8; }
 }
