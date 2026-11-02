@@ -119,7 +119,10 @@ would:
 These are dot names such as `.DS_Store`, files the telescope is still writing
 such as `*.mp4.tmp`, Windows system files, and the telescope's logs and scratch
 folders. They are a fixed list, not a judgment of each file: a folder whose
-name starts with a dot is skipped even if it holds images.
+name starts with a dot is skipped even if it holds images. The public
+[Seestar share layout](https://github.com/zmerlynn/seestar-spec/blob/HEAD/spec/media/smb.md#image-store-layout-firmware-975)
+for firmware 9.75 describes the root folders such as `log` and `tmp_stitch`,
+what writes them, and the `.mp4.tmp` name a video has while it is written.
 
 Each `--exclude` adds a pattern to the built-in ones. To change the built-in
 list, give `--no-default-excludes` and repeat the `--exclude` flags you want to
