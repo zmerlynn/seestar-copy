@@ -43,9 +43,9 @@ find lists the share once, leaving out what sync would: --exclude,
 device mtime is at least that old. Folders are always listed.
 Each entry is one line on stdout, in listing order. --format text, the
 default, writes the type (d for a folder, - for a file), the size in bytes,
-the device mtime in UTC as RFC 3339, and the share path, quoted in Go and
-JSON string syntax if it holds a space, a quote, a backslash or any
-character that is not printable. --format jsonl writes one JSON object per
+the device mtime in UTC as RFC 3339, and the share path, quoted in Go
+string syntax if it holds a space, a quote, a backslash, a character that
+is not printable, or bytes that are not UTF-8. --format jsonl writes one JSON object per
 line with the members path, type (file or dir), size, mtime and status.
 With --dest, find reads that destination's state file, as a sync dry run
 does, and adds a status to each file, as a column before the path: copied
