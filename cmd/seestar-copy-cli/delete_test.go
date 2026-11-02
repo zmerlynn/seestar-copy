@@ -558,26 +558,38 @@ func TestDeleteDryRunParity(t *testing.T) {
 	}
 }
 
-// The state's quirks: a torn final line is ignored, the last record of a
-// path wins, a renamed local copy does not prove its file, and a lock held
-// by a running sync does not stop delete, which takes none.
+// The state's quirks: a file whose only record is a torn final line is
+// not in the state, the last record of a path wins, a renamed local copy
+// does not prove its file, nor does a copy swapped by rename for other
+// bytes, and a lock held by a running sync does not stop delete, which
+// takes none.
 func TestDeleteStateQuirks(t *testing.T) {
 	s := newWritableShare(t)
 	a := stateRec{"MyWorks/a.fit", "aaa", deleteOld}
 	b := stateRec{"MyWorks/b.fit", "bbb", deleteOld}
 	c := stateRec{"MyWorks/c.fit", "ccc", deleteOld}
-	for _, r := range []stateRec{a, b, c} {
+	d := stateRec{"MyWorks/d.fit", "ddd", deleteOld}
+	e := stateRec{"MyWorks/e.fit", "eee", deleteOld}
+	for _, r := range []stateRec{a, b, c, d, e} {
 		s.put(t, r.path, r.data, r.mtime)
 	}
 	s.use(t)
 	dest, stateDir := t.TempDir(), t.TempDir()
-	place(t, dest, a.path, a.data, deleteOld)
+	for _, r := range []stateRec{a, c, d, e} {
+		place(t, dest, r.path, r.data, deleteOld)
+	}
 	place(t, dest, "MyWorks/b renamed.fit", b.data, deleteOld)
-	place(t, dest, c.path, c.data, deleteOld)
-	// c is first recorded with another mtime, then replaced; a's first
-	// record is replaced by one with another mtime.
+	// e's copy is swapped, by rename, for a file of its size with other
+	// bytes.
+	place(t, dest, "MyWorks/e.tmp", "eex", deleteOld)
+	if err := os.Rename(filepath.Join(dest, "MyWorks", "e.tmp"), filepath.Join(dest, "MyWorks", "e.fit")); err != nil {
+		t.Fatal(err)
+	}
+	// a's record is replaced by one with another mtime; c's record with
+	// another mtime is replaced by a matching one; d's only record is torn.
 	stale := func(r stateRec) stateRec { r.mtime = r.mtime.Add(-time.Hour); return r }
-	statePath := writeDeleteState(t, dest, stateDir, `{"path":"MyWorks/c.fit","si`, a, stale(a), b, stale(c), c)
+	torn := strings.TrimSuffix(recLine(d), "\n")
+	statePath := writeDeleteState(t, dest, stateDir, torn, a, stale(a), b, stale(c), c, e)
 	stateBefore := readFile(t, statePath)
 	// Hold the destination's own lock, as a running sync would.
 	lock, err := lockState(t, stateDir, dest)
@@ -594,6 +606,9 @@ func TestDeleteStateQuirks(t *testing.T) {
 		`msg="file kept" path=MyWorks/a.fit reason="changed on the device since it was copied"`,
 		`msg="file kept" path=MyWorks/b.fit reason="local copy missing; give --trust-state if it was moved"`,
 		`msg="file deleted" path=MyWorks/c.fit size=3`,
+		`msg="file kept" path=MyWorks/d.fit reason="not in the state"`,
+		`level=WARN msg="file kept" path=MyWorks/e.fit reason="local copy's SHA-256 differs from the state"`,
+		`msg="deletion done" deleted=1 `,
 	} {
 		if !strings.Contains(stderr, want) {
 			t.Errorf("log lacks %q:\n%s", want, stderr)
@@ -626,7 +641,7 @@ func lockState(t *testing.T, stateDir, dest string) (*state.State, error) {
 }
 
 // sync, then delete, then sync again copies nothing and fails nothing; a
-// new file at a deleted path is then copied over the old copy.
+// new file at a deleted path then replaces the old copy.
 func TestDeleteBetweenSyncs(t *testing.T) {
 	s := newWritableShare(t)
 	s.put(t, "MyWorks/M 31/a.fit", "aaa", deleteOld)
@@ -657,7 +672,7 @@ func TestDeleteBetweenSyncs(t *testing.T) {
 	checkLocal(t, dest, "MyWorks/M 31/a.fit", "aaa", deleteOld)
 	newer := deleteOld.Add(time.Hour)
 	s.put(t, "MyWorks/M 31/a.fit", "new", newer)
-	if log := syncOnce(); !strings.Contains(log, `failed=0 `) || strings.Contains(log, "copied=0 replaced=0") {
+	if log := syncOnce(); !strings.Contains(log, `msg="pass done" copied=0 replaced=1 adopted=0 waiting=0 failed=0 `) {
 		t.Errorf("sync of a new file:\n%s", log)
 	}
 	checkLocal(t, dest, "MyWorks/M 31/a.fit", "new", newer)
