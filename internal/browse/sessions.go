@@ -133,32 +133,32 @@ func (p *Sessions) startDial() *dialing {
 			}
 			err = fmt.Errorf("connect to the device: no answer after %v", dialTimeout)
 		}
+		// The outcome is logged before the waiters wake, so it comes
+		// before any line of theirs.
 		var sess *session
 		p.mu.Lock()
 		p.pending = nil
-		closed := p.closed
 		switch {
-		case closed && err == nil:
-			err = errStopped
+		case p.closed:
+			if err == nil {
+				err = errStopped
+			}
 		case err == nil:
 			sess = &session{s: s, cancel: cancel}
 			p.cur = sess
 			p.armIdle(sess)
+			p.log.Info("session opened")
+		default:
+			p.log.Warn("connect failed", "error", err)
 		}
 		d.sess, d.err = sess, err
 		close(d.done)
 		p.mu.Unlock()
-		switch {
-		case sess != nil:
-			p.log.Info("session opened")
-		case closed:
+		if sess == nil {
 			if s != nil {
 				s.Close()
 			}
 			cancel()
-		default:
-			cancel()
-			p.log.Warn("connect failed", "error", err)
 		}
 	}()
 	return d
