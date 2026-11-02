@@ -18,11 +18,13 @@ the release workflow from an annotated tag.
 
 The [command reference](reference.md) has the detail of each item.
 
-1. **Commands and flags.** `sync`, `licenses`, `help` and the top-level `--version`; flag names, meanings and
-   grammar; the defaults of every `sync` flag, as in [flags](reference.md#flags); and the rules about which values
-   are refused. A new flag whose default keeps the old behavior is additive. The
-   [selection](reference.md#selection): sync copies the whole share except what an exclude pattern matches; the
-   built-in patterns are exactly the listed `--exclude` flags, and adding, removing or changing one is breaking;
+1. **Commands and flags.** `sync`, `find`, `licenses`, `help` and the top-level `--version`; flag names, meanings
+   and grammar; the defaults of every `sync` and `find` flag, as in [flags](reference.md#flags) and
+   [find flags](reference.md#find-flags); and the rules about which values are refused. `--older-than` takes a Go
+   duration or a whole number of days such as `7d`, not both. A new flag whose default keeps the old behavior is
+   additive. The [selection](reference.md#selection), the same for sync and find: the whole share except what an
+   exclude pattern matches; the built-in patterns are exactly the listed `--exclude` flags, and adding, removing or
+   changing one is breaking;
    `--exclude` adds to them and `--no-default-excludes` removes them all; with one or more `--include` patterns,
    only files that an include matches, or that are in a folder an include matches, are selected; excludes always
    win over includes, whatever the order; one pattern grammar for both flags, that an excluded folder is not
@@ -32,9 +34,9 @@ The [command reference](reference.md) has the detail of each item.
    [location](reference.md#location). Adding opt-in configuration later is additive and must not override explicit
    flags.
 3. **Exit codes.** 0, 1 and 2, as in [exit codes](reference.md#exit-codes), and which outcome maps to which code.
-4. **What sync does to the device.** It only reads: it never creates, changes, renames, deletes or locks anything on
-   the share. It logs in as guest to the share `EMMC Images`. A release that writes to the device in any way is not a
-   compatible release.
+4. **What sync and find do to the device.** They only read: they never create, change, rename, delete or lock
+   anything on the share. They log in as guest to the share `EMMC Images`. A release in which either writes to the
+   device in any way is not a compatible release.
 5. **The destination.** The [layout](reference.md#destination-layout): files mirror the share's tree under
    `--dest` with names kept byte for byte; downloaded files get the device's mtime, adopted files keep their own,
    which is within the adoption tolerance in the decision rules; and folders' mtimes are not set. The
@@ -69,6 +71,13 @@ The [command reference](reference.md) has the detail of each item.
    [verifying a release](reference.md#verifying-a-release).
 9. **`--version`.** One line on stdout, `seestar-copy-cli <version> (<revision>, <os>/<arch>)`, where a release's
    `<version>` is its tag, such as `v0.1.0`, and `<revision>` is the first 12 hex digits of its commit.
+10. **find's output.** The listing goes to stdout, one line per entry, in listing order, and lists the folders the
+    selection reads and the files it selects, as in [what find lists](reference.md#what-find-lists). The
+    [text format](reference.md#text-format): its fields, their order and syntax, and when and how a path is quoted.
+    The [JSONL format](reference.md#jsonl-format): the member names, their types and meanings. The three
+    [statuses](reference.md#statuses) `copied`, `changed` and `new` and the rule for each. Find writes nothing on
+    disk and never creates `--dest` or the state. Adding a JSONL member is additive; removing or renaming one,
+    adding or changing a text field, adding a status or changing what one means is breaking.
 
 ## Not in the contract
 
@@ -79,7 +88,7 @@ The [command reference](reference.md) has the detail of each item.
 - scripts/, docs/development/ and the test fixtures.
 - Timing and throughput: pass duration, the order files are copied in, and how reads are split on the wire. The
   meaning of `--interval`, `--ready-age` and `--first-pass-age` is in the contract; how long a pass takes is not.
-- Which SMB dialect and features are negotiated with the device, as long as items 1-9 hold.
+- Which SMB dialect and features are negotiated with the device, as long as items 1-10 hold.
 
 ## Bumps
 
