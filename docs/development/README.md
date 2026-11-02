@@ -17,7 +17,7 @@ is stopped.
 
 | Path | What it does |
 | --- | --- |
-| `cmd/seestar-copy-cli` | The command tree (built with [cobra](https://github.com/spf13/cobra)), flag checks, exit codes and logging, and the `sync` pass loop: dial, list, plan, copy, log off, sleep. |
+| `cmd/seestar-copy-cli` | The command tree (built with [cobra](https://github.com/spf13/cobra)), flag checks, exit codes and logging, the `sync` pass loop (dial, list, plan, copy, log off, sleep), and `find`'s listing. |
 | `internal/remote` | The read-only view of the telescope's share through [go-smb2](https://github.com/hirochachacha/go-smb2): guest login, recursive listing, read-only opens. `NewFake` serves an `io/fs` tree with injected faults for tests. |
 | `internal/state` | The per-destination state file: JSON Lines, last record per path wins, torn-tail tolerance, append with fsync, and the exclusive lock. |
 | `internal/plan` | The pass decisions: wait, done, copy, replace, adopt or fail for each listed file. A pure function with no I/O; the current time is an input. |
