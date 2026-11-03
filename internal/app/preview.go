@@ -226,9 +226,17 @@ func (p *previewer) view() *previewView {
 			v.Title = "Couldn't preview: " + st.err.Error() + "."
 		}
 	case pvDone:
-		v.Title = "Nothing to copy."
-		if st.files > 0 {
+		// Files that can't be copied are in the title, which is
+		// announced.
+		switch {
+		case st.files > 0 && st.failed > 0:
+			v.Title = fmt.Sprintf("Would copy %s (%s); %s can't be copied.", many(st.files, "file", "files"), size(float64(st.bytes)), num(st.failed))
+		case st.files > 0:
 			v.Title = fmt.Sprintf("Would copy %s (%s)", many(st.files, "file", "files"), size(float64(st.bytes)))
+		case st.failed > 0:
+			v.Title = "Preview finished: " + many(st.failed, "file", "files") + " can't be copied."
+		default:
+			v.Title = "Nothing to copy."
 		}
 		var parts []string
 		for _, c := range []struct {
@@ -237,7 +245,6 @@ func (p *previewer) view() *previewView {
 		}{
 			{st.already, "Already copied or in your folder"},
 			{st.wait, "Still being written"},
-			{st.failed, "Can't copy"},
 			{st.leftOut, "Left out"},
 		} {
 			if c.n > 0 {

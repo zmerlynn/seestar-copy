@@ -85,10 +85,10 @@ func TestPreview(t *testing.T) {
 	beforeState := snapshotDir(t, e.stateDir)
 
 	v := e.run()
-	if v == nil || v.State != pvDone || v.Title != "Would copy 5 files (21 B)" {
-		t.Fatalf("got %+v, want 5 files to copy", v)
+	if v == nil || v.State != pvDone || v.Title != "Would copy 5 files (21 B); 2 can't be copied." {
+		t.Fatalf("got %+v, want 5 files to copy and 2 that can't be", v)
 	}
-	if want := "Already copied or in your folder 2 · Still being written 1 · Can't copy 2 · Left out 1"; v.Sub != want {
+	if want := "Already copied or in your folder 2 · Still being written 1 · Left out 1"; v.Sub != want {
 		t.Errorf("sub: got %q, want %q", v.Sub, want)
 	}
 	var got []string
@@ -296,7 +296,7 @@ func TestPreviewAPI(t *testing.T) {
 		return v.Preview
 	}
 	// The test share's one file has no mtime, so it can't be copied.
-	if v := preview(); v.State != pvDone || v.Sub != "Can't copy 1" {
+	if v := preview(); v.State != pvDone || v.Title != "Preview finished: 1 file can't be copied." || v.Sub != "" {
 		t.Errorf("preview: %+v", v)
 	}
 	if w := e.post("/app/api/copy", `{"action":"cancel"}`); w.Code != 200 || decode[copyView](t, w).Preview != nil {
