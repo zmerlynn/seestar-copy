@@ -92,7 +92,7 @@ test('Clear history forgets the folder, and the next pass copies nothing again',
   await tab(page, 'Copy').click();
   await button(page, 'Start copying').click();
   await expect(title(page)).toHaveText(upToDate, { timeout: 30000 });
-  await expect(page.locator('#c-summary')).toHaveText('No files were copied.');
+  await expect(page.locator('#c-summary')).toHaveText('No files were copied. 7 were already in your folder.');
   expect(fs.existsSync(history)).toBe(true);
 });
 
