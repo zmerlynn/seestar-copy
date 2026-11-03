@@ -126,6 +126,7 @@ async function choose() {
   if (status === 200 && data && data.folder) {
     $('#f-folder').value = data.folder;
     renderHistory();
+    renderFirst();
     showErrors({ ...currentErrors(), folder: '' });
   } else if (status !== 200) {
     showErrors({ ...currentErrors(), folder: (data && data.error) || "Couldn't open the folder picker. Type the folder's full path instead." });
@@ -140,11 +141,19 @@ async function save(ev) {
   const btn = $('#f-save');
   if (btn.disabled) return;
   btn.disabled = true;
+  renderFirst();
   try {
     await saveForm();
   } finally {
     btn.disabled = false;
+    renderFirst();
   }
+}
+
+// renderFirst turns on the first-run line's Save and continue, which saves
+// as Save does, once the address and folder are filled in.
+function renderFirst() {
+  $('#s-save').disabled = $('#f-save').disabled || !$('#f-addr').value.trim() || !$('#f-folder').value.trim();
 }
 
 async function saveForm() {
@@ -159,6 +168,8 @@ async function saveForm() {
   showErrors({});
   if (status !== 200 || !data) {
     result('#f-saved', (data && data.error) || "Couldn't save settings. Your changes have not been saved. Try saving again.", 'err');
+    // Save and continue is at the top, so the answer scrolls into view.
+    $('#f-saved').scrollIntoView({ block: 'nearest' });
     return;
   }
   const changed = !saved || saved.address !== data.settings.address;
@@ -200,6 +211,7 @@ function select(tab) {
 function gate() {
   for (const t of TABS) if (t !== 'settings') $('#t-' + t).disabled = !saved;
   $('#s-first').hidden = !!saved;
+  renderFirst();
   $('#haddr').hidden = !saved;
 }
 
@@ -669,6 +681,10 @@ $('#s-clip').addEventListener('click', (ev) =>
   clip(ev.currentTarget, $('#s-file').textContent, '#f-saved', 'Settings file path copied.'),
 );
 $('#f-folder').addEventListener('input', renderHistory);
+$('#f-folder').addEventListener('input', renderFirst);
+$('#f-addr').addEventListener('input', renderFirst);
+// The submit event, not a click, so Save's guard and handler apply.
+$('#s-save').addEventListener('click', () => form.requestSubmit());
 $('#h-clear').addEventListener('click', () => {
   result('#h-result', '');
   $('#h-confirm').showModal();
