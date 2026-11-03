@@ -47,8 +47,8 @@ const (
 var errBusy = errors.New("copying is already on")
 
 // controller runs the copy loop, at most one at a time, and keeps its
-// status. Its mutex is never held while waiting on the engine, the disk or
-// the network.
+// status. Its mutex is never held while waiting on the engine, the disk,
+// the network or the log.
 type controller struct {
 	parent   context.Context
 	stateDir string
@@ -115,8 +115,8 @@ func (c *controller) start(set Settings) error {
 		return err
 	}
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if c.done != nil || c.quitting {
+		c.mu.Unlock()
 		return errBusy
 	}
 	ctx, cancel := context.WithCancel(c.parent)
@@ -129,6 +129,7 @@ func (c *controller) start(set Settings) error {
 		ReadyAge: readyAge, FirstPassAge: firstPassAge, Workers: workers,
 		Dial: c.dialPass, Hooks: c.hooks(ctx), CheckNow: c.checkNow, Recreate: true,
 	}
+	c.mu.Unlock()
 	c.log.Info("copying started", "endpoint", set.Address, "dest", set.Folder)
 	go func() {
 		ticks := time.NewTicker(time.Second)
@@ -180,7 +181,6 @@ func selector(set Settings) (engine.Selector, error) {
 // finish records how the loop ended.
 func (c *controller) finish(err error) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	st := &c.st
 	switch {
 	case errors.Is(err, state.ErrLocked):
@@ -192,6 +192,7 @@ func (c *controller) finish(err error) {
 	default:
 		st.state = stOff
 	}
+	c.mu.Unlock()
 	if err != nil {
 		c.log.Error("copying stopped", "err", err)
 	} else {
