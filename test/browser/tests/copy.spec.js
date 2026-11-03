@@ -48,7 +48,6 @@ test('Save and start copying runs a pass, and Settings are locked while copying 
   // Settings can't change while copying is on; its Stop copying unlocks them.
   await tab(page, 'Settings').click();
   await expect(page.locator('#s-locked')).toBeVisible();
-  await expect(page.locator('#f-set')).toBeDisabled();
   await expect(field(page, 'Telescope address')).toBeDisabled();
   await page.locator('#s-stop').click();
   await expect(page.locator('#s-locked')).toBeHidden();

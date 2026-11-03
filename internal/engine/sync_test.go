@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -219,6 +220,9 @@ func TestCheckNow(t *testing.T) {
 // and a later pass copies a new file there, while the state stays open
 // and locked. Without it, as in the CLI, the new file fails.
 func TestRecreate(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows refuses to remove a folder the copier has open, so it can't go missing while copying is on")
+	}
 	for _, recreate := range []bool{true, false} {
 		t.Run(fmt.Sprint("recreate=", recreate), func(t *testing.T) {
 			check := make(chan struct{})

@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -290,6 +291,9 @@ func TestCopyUnreachable(t *testing.T) {
 // The folder removed between passes is created again while the lock stays
 // held.
 func TestCopyRecreatesFolder(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows refuses to remove a folder the copier has open, so it can't go missing while copying is on")
+	}
 	e := newCopyEnv(t, fstest.MapFS{"MyWorks/a.jpg": image("abc")})
 	if err := e.c.start(e.set); err != nil {
 		t.Fatal(err)
