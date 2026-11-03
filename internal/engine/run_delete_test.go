@@ -370,6 +370,27 @@ func TestDeleteOnlyProof(t *testing.T) {
 	}
 }
 
+// Hashing comes before the copy is read: a copy changed from inside
+// Hashing is the one checked, so the file is kept.
+func TestDeleteHashingBeforeRead(t *testing.T) {
+	s := newShare(t)
+	put(t, s.dir, "MyWorks/a.jpg", "aaaa")
+	put(t, s.dest, "MyWorks/a.jpg", "aaaa")
+	s.record(t, map[string]string{"MyWorks/a.jpg": "aaaa"})
+	o := s.options()
+	o.Hooks.Hashing = func(p string) { put(t, s.dest, p, "xxxx") }
+	r, err := RunDelete(t.Context(), o, discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []DeleteFile{{"MyWorks/a.jpg", 4, FileKept, "local copy's SHA-256 differs from the state"}}; !slices.Equal(r.Files, want) {
+		t.Errorf("got files %+v, want %+v", r.Files, want)
+	}
+	if !s.has(t, "MyWorks/a.jpg") {
+		t.Error("MyWorks/a.jpg: gone from the device, want it kept")
+	}
+}
+
 // A real run counts the folder it emptied, and a file younger than
 // OlderThan is in the result as recent.
 func TestDeleteResultFoldersAndRecent(t *testing.T) {
