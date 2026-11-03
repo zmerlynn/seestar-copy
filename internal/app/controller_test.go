@@ -158,7 +158,7 @@ func TestCopyStartCheckStop(t *testing.T) {
 	// A new file waits one pass to be seen unchanged.
 	e.files["MyWorks/M 42/b.jpg"] = image("b")
 	v = e.next()
-	if v.Settling != "1 new file is still being written. They'll be copied on a later check." || v.Summary != "No new files to copy. 1 is still being written." {
+	if v.Settling != "1 new file is still being written. They'll be copied on a later check." || v.Summary != "No files were copied. 1 is still being written." {
 		t.Errorf("settling: %+v", v)
 	}
 	e.mu.Lock()
@@ -171,7 +171,7 @@ func TestCopyStartCheckStop(t *testing.T) {
 	e.c.stop()
 	e.waitOff()
 	v = e.wait(stOff)
-	if v.On || v.Chip != "Copying is off" || v.Title != "Copying is off." || !strings.HasPrefix(v.Summary, "No new files") {
+	if v.On || v.Chip != "Copying is off" || v.Title != "Copying is off." || !strings.HasPrefix(v.Summary, "No files were copied.") {
 		t.Errorf("after Stop: %+v", v)
 	}
 	if e.locked() {
@@ -252,7 +252,8 @@ func TestCopyFolderInUse(t *testing.T) {
 	e.wait(stUpToDate)
 }
 
-// A folder that can't be created is Can't write, and copying is off.
+// A startup error turns copying off and names its cause; only a refused
+// write says to choose another folder.
 func TestCopyCantWrite(t *testing.T) {
 	e := newCopyEnv(t, fstest.MapFS{})
 	parent := filepath.Join(t.TempDir(), "file")
@@ -263,7 +264,13 @@ func TestCopyCantWrite(t *testing.T) {
 	}
 	e.waitOff()
 	v := e.wait(stCantWrite)
-	if !strings.HasPrefix(v.Title, "Can't write to "+e.set.Folder+": ") || v.On {
+	if !strings.HasPrefix(v.Title, "Couldn't start copying: create destination: ") ||
+		v.Text != "Fix the problem, then start copying." || v.On {
+		t.Errorf("can't start: %+v", v)
+	}
+	e.c.finish(fmt.Errorf("create destination: %w", &fs.PathError{Op: "mkdir", Path: e.set.Folder, Err: fs.ErrPermission}))
+	v = e.c.view(time.Now())
+	if v.Title != "Can't write to "+e.set.Folder+": permission denied." || v.Text != "Choose a writable folder in Settings, then start copying." {
 		t.Errorf("can't write: %+v", v)
 	}
 }
@@ -398,6 +405,10 @@ func TestWording(t *testing.T) {
 	want := "Copied 52 files (1.2 GB) in 2 min 31 s. 3 were already in your folder. 1 changed on the telescope and was copied again. 6 are still being written. 2 failed."
 	if got != want {
 		t.Errorf("summary:\n got %q\nwant %q", got, want)
+	}
+	// Every file failed: none were copied, though there were new files.
+	if got, want := summaryLine(engine.Summary{Failed: make([]engine.Failure, 2)}), "No files were copied. 2 failed."; got != want {
+		t.Errorf("all failed: got %q, want %q", got, want)
 	}
 }
 

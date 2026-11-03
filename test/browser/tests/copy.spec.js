@@ -70,7 +70,7 @@ test('Check now runs another pass, and Stop and Start move focus to the heading'
   await button(page, 'Check now').click();
   await expect(passes(page)).toHaveCount(2);
   await expect(title(page)).toHaveText(upToDate);
-  await expect(page.locator('#c-summary')).toHaveText('No new files to copy.');
+  await expect(page.locator('#c-summary')).toHaveText('No files were copied.');
 
   await button(page, 'Stop copying').click();
   await expect(title(page)).toHaveText(off);
@@ -123,7 +123,7 @@ test('the CLI copying to the same folder shows Folder in use until it stops', as
     await button(page, 'Start copying').click();
     await expect(title(page)).toHaveText(upToDate, { timeout: 30000 });
     // The CLI copied everything into the same state.
-    await expect(page.locator('#c-summary')).toHaveText('No new files to copy.');
+    await expect(page.locator('#c-summary')).toHaveText('No files were copied.');
   } finally {
     cli.kill('SIGINT');
     await exited;
@@ -147,7 +147,7 @@ test('a second app on the same folder shows Folder in use until the first stops'
   await expect(title(page)).toHaveText(off);
   await button(other, 'Start copying').click();
   await expect(title(other)).toHaveText(upToDate, { timeout: 30000 });
-  await expect(other.locator('#c-summary')).toHaveText('No new files to copy.');
+  await expect(other.locator('#c-summary')).toHaveText('No files were copied.');
   await expect(title(other)).toBeFocused();
 });
 

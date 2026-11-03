@@ -40,7 +40,7 @@ const (
 	stStopping    = "stopping"
 	stStopped     = "stopped" // stopped during a pass's downloads
 	stInUse       = "inuse"
-	stCantWrite   = "cantwrite"
+	stCantWrite   = "cantwrite" // the loop ended with an error, other than the lock
 )
 
 // errBusy is a start while copying is on or stopping, or the app quitting.
@@ -94,7 +94,7 @@ type status struct {
 	stopCopied, stopDiscarded int
 	wasCopying                bool
 
-	reason string // why the destination can't be written
+	startErr error // why the loop couldn't start, or go on
 }
 
 func newController(parent context.Context, stateDir string, log *slog.Logger, dial func(context.Context, string) (remote.Session, error)) *controller {
@@ -186,7 +186,7 @@ func (c *controller) finish(err error) {
 	case errors.Is(err, state.ErrLocked):
 		st.state = stInUse
 	case err != nil:
-		st.state, st.reason = stCantWrite, reason(err)
+		st.state, st.startErr = stCantWrite, err
 	case c.stopping && st.wasCopying:
 		st.state = stStopped
 	default:
@@ -514,8 +514,14 @@ func (c *controller) view(now time.Time) copyView {
 		v.Title = "Another copy is already using this folder."
 		v.Text = "It's in another seestar-copy window or seestar-copy-cli. Stop that copy, then start copying here."
 	case stCantWrite:
-		v.Title = "Can't write to " + st.folder + ": " + st.reason + "."
-		v.Text = "Choose a writable folder in Settings, then start copying."
+		// Only a refused write names the folder as the cause.
+		if errors.Is(st.startErr, fs.ErrPermission) {
+			v.Title = "Can't write to " + st.folder + ": " + reason(st.startErr) + "."
+			v.Text = "Choose a writable folder in Settings, then start copying."
+		} else {
+			v.Title = "Couldn't start copying: " + st.startErr.Error() + "."
+			v.Text = "Fix the problem, then start copying."
+		}
 	}
 	switch st.state {
 	case stOff, stUpToDate, stFailures:
@@ -575,7 +581,7 @@ func unread(err error) string {
 func summaryLine(s engine.Summary) string {
 	var parts []string
 	if n := s.Copied + s.Replaced; n == 0 {
-		parts = append(parts, "No new files to copy.")
+		parts = append(parts, "No files were copied.")
 	} else {
 		parts = append(parts, fmt.Sprintf("Copied %s (%s) in %s.", count(n, "file", "files"), size(float64(s.Bytes)), elapsed(s.Elapsed)))
 	}
