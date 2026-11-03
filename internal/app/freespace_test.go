@@ -186,6 +186,14 @@ func TestFreePreviewAndDelete(t *testing.T) {
 	if !slices.Equal(v.KeptList, wantKept) {
 		t.Errorf("kept list %+v", v.KeptList)
 	}
+	// The check saw the last folder listed and the last copy checked; the
+	// run goes through the listing in reverse.
+	e.f.mu.Lock()
+	folder, folders, hashing := e.f.st.listed, e.f.st.folders, e.f.st.hashing
+	e.f.mu.Unlock()
+	if folder != "MyWorks/M 42" || folders != 3 || hashing != "MyWorks/M 31/c.jpg" {
+		t.Errorf("after the check: listed %q (%d), checked %q; want MyWorks/M 42 (3) and MyWorks/M 31/c.jpg", folder, folders, hashing)
+	}
 
 	if err := e.f.confirm(v.ID, []string{"MyWorks/M 42"}); err != nil {
 		t.Fatal(err)
@@ -335,7 +343,8 @@ func TestFreeStopHeld(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("no removal was held")
 	}
-	if d := e.f.view(); d.State != frDeleting || d.Title != "Deleting 1 of 3…" || d.Progress == nil || d.Progress.Total != 3 || d.Stopping {
+	if d := e.f.view(); d.State != frDeleting || d.Title != "Deleting 1 of 3…" || d.Progress == nil || d.Progress.Total != 3 || d.Stopping ||
+		d.File != "Checking "+first+"…" {
 		t.Errorf("deleting: %+v", d)
 	}
 	e.f.halt()

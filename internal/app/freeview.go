@@ -33,9 +33,12 @@ type freeStatus struct {
 	changed bool // Start, after a Save or a Clear history changed what a preview showed
 	stale   bool // a Save changed the inputs of the running check
 	set     Settings
-	// Checking.
+	// Checking, and Deleting before each delete.
 	files          int // Checked
 	hashed, toHash int64
+	listed         string // the last folder listed
+	folders        int
+	hashing        string // the file being checked, until it is deleted
 	// Preview and Nothing: the preview, and its number.
 	preview *engine.DeleteResult
 	id      int
@@ -100,6 +103,7 @@ func (st *freeStatus) view() freeView {
 		if st.toHash > 0 {
 			v.Progress = &freeBar{st.hashed, st.toHash, "Checking your copies: " + size(float64(st.hashed)) + " of " + size(float64(st.toHash))}
 		}
+		v.File = st.crawl()
 	case frCheckFail:
 		v.Title = "Couldn't finish checking files: " + st.err.Error() + "."
 		v.Text = "Preview again to retry."
@@ -156,8 +160,11 @@ func (st *freeStatus) view() freeView {
 	case frDeleting:
 		v.Title = fmt.Sprintf("Deleting %s of %s…", num(min(st.deleted+1, st.total)), num(st.total))
 		v.Progress = &freeBar{Done: int64(st.deleted), Total: int64(st.total)}
-		// The engine reports a file once it is deleted, not as it starts.
-		if st.current != "" {
+		// The engine reports a file once it is deleted, not as it starts;
+		// until then, and while the next file is checked, the line says
+		// what the run is looking at.
+		v.File = st.crawl()
+		if st.hashing == "" && st.current != "" {
 			v.File = "Last deleted: " + st.current
 		}
 		v.Stopping = st.stopping
@@ -187,6 +194,18 @@ func (st *freeStatus) view() freeView {
 		}
 	}
 	return v
+}
+
+// crawl words what the run is looking at, if anything: the file being
+// checked, or the last folder listed. The title alone is announced.
+func (st *freeStatus) crawl() string {
+	switch {
+	case st.hashing != "":
+		return "Checking " + st.hashing + "…"
+	case st.listed != "":
+		return "Listing " + st.listed + "… (" + many(st.folders, "folder", "folders") + ")"
+	}
+	return ""
 }
 
 // groupByFolder groups files, given as path and size, by folder: groups

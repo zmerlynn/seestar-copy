@@ -100,17 +100,16 @@ func (f *freer) find(set Settings) error {
 		return err
 	}
 	o.DryRun, o.Dial = true, f.dial
-	o.Hooks = engine.Hooks{
-		Checked: func(n int) {
-			f.mu.Lock()
-			defer f.mu.Unlock()
-			f.st.files = n
-		},
-		Hashed: func(done, total int64) {
-			f.mu.Lock()
-			defer f.mu.Unlock()
-			f.st.hashed, f.st.toHash = done, total
-		},
+	o.Hooks = f.crawlHooks()
+	o.Hooks.Checked = func(n int) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		f.st.files = n
+	}
+	o.Hooks.Hashed = func(done, total int64) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		f.st.hashed, f.st.toHash = done, total
 	}
 	return f.run(freeStatus{state: frChecking, set: set}, o, nil, 0, func(r engine.DeleteResult, err error, canceled bool) {
 		st := &f.st
@@ -152,14 +151,13 @@ func (f *freer) confirm(id int, folders []string) error {
 		return err
 	}
 	o.OpenRemover, o.Only = f.remover, only
-	o.Hooks = engine.Hooks{
-		Deleted: func(p string, size int64) {
-			f.mu.Lock()
-			defer f.mu.Unlock()
-			f.st.deleted++
-			f.st.bytes += size
-			f.st.current = p
-		},
+	o.Hooks = f.crawlHooks()
+	o.Hooks.Deleted = func(p string, size int64) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		f.st.deleted++
+		f.st.bytes += size
+		f.st.current, f.st.hashing = p, ""
 	}
 	if f.prepared != nil {
 		f.prepared()
@@ -179,6 +177,23 @@ func (f *freer) confirm(id int, folders []string) error {
 			st.state = frDone
 		}
 	})
+}
+
+// crawlHooks report what a run is looking at: the folder it lists and
+// the file it checks.
+func (f *freer) crawlHooks() engine.Hooks {
+	return engine.Hooks{
+		Listed: func(p string, n int) {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			f.st.listed, f.st.folders = p, n
+		},
+		Hashing: func(p string) {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			f.st.hashing = p
+		},
+	}
 }
 
 // cancelCheck ends a running preview; the tab goes back to Start.

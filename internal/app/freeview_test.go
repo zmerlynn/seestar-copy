@@ -20,6 +20,10 @@ func TestFreeWording(t *testing.T) {
 	}{
 		{"counted", freeStatus{state: frChecking, files: 1204, hashed: 1500, toHash: 3_000_000},
 			freeView{Title: "Checking 1,204 files…", Progress: &freeBar{1500, 3_000_000, "Checking your copies: 1.5 KB of 3.0 MB"}}},
+		{"listing", freeStatus{state: frChecking, listed: "MyWorks/M 31", folders: 1830},
+			freeView{Title: "Checking files…", File: "Listing MyWorks/M 31… (1,830 folders)"}},
+		{"hashing", freeStatus{state: frChecking, files: 3, hashed: 0, toHash: 9, listed: "MyWorks/M 31", folders: 1, hashing: "MyWorks/M 31/a.fit"},
+			freeView{Title: "Checking 3 files…", Progress: &freeBar{0, 9, "Checking your copies: 0 B of 9 B"}, File: "Checking MyWorks/M 31/a.fit…"}},
 		{"nothing", freeStatus{state: frNothing, set: Settings{OlderThanDays: 7}, preview: &engine.DeleteResult{}},
 			freeView{Title: "Nothing to delete yet.", Text: "Files become eligible once they're copied and older than 7 days."}},
 		{"nothing any age", freeStatus{state: frNothing, preview: &engine.DeleteResult{}},
@@ -40,6 +44,10 @@ func TestFreeWording(t *testing.T) {
 			freeView{Title: "Deleting 3 of 5…", Progress: &freeBar{Done: 2, Total: 5}, File: "Last deleted: MyWorks/b.jpg"}},
 		{"deleting the first", freeStatus{state: frDeleting, total: 5},
 			freeView{Title: "Deleting 1 of 5…", Progress: &freeBar{Done: 0, Total: 5}}},
+		{"deleting, listing", freeStatus{state: frDeleting, total: 5, listed: "MyWorks", folders: 1},
+			freeView{Title: "Deleting 1 of 5…", Progress: &freeBar{Done: 0, Total: 5}, File: "Listing MyWorks… (1 folder)"}},
+		{"deleting, checking the next", freeStatus{state: frDeleting, deleted: 2, total: 5, current: "MyWorks/b.jpg", listed: "MyWorks", folders: 1, hashing: "MyWorks/a.jpg"},
+			freeView{Title: "Deleting 3 of 5…", Progress: &freeBar{Done: 2, Total: 5}, File: "Checking MyWorks/a.jpg…"}},
 		{"failed after some", freeStatus{state: frFailed, deleted: 2, err: refused, result: engine.DeleteResult{Files: []engine.DeleteFile{
 			{Path: "MyWorks/b.jpg", Outcome: engine.FileFailed, Reason: refused.Error()}}}},
 			freeView{Title: "Stopped: the telescope refused to delete MyWorks/b.jpg (permission denied).", Text: "2 files were deleted before this; nothing after it."}},
