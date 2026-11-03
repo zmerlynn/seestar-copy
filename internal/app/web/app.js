@@ -400,6 +400,9 @@ function renderFree(v) {
   text('#x-dfile', v.file);
   for (const [sel, states] of Object.entries(XSHOWS)) $(sel).hidden = !states.includes(st);
   if (v.stopping) $('#x-stop').hidden = true;
+  // An open confirm belongs to the preview it words: it closes before
+  // another preview, or none, replaces that one's id and folders.
+  if ((st !== 'preview' || v.id !== free.id) && $('#x-confirm').open) $('#x-confirm').close();
   if (st === 'preview' && v.id !== free.id) {
     free.id = v.id;
     free.trust = v.trust;
@@ -438,7 +441,6 @@ function renderFree(v) {
     });
     count();
   }
-  if (st !== 'preview' && $('#x-confirm').open) $('#x-confirm').close();
   const kept = JSON.stringify([v.kept, v.kept_list]);
   if (kept !== free.kept) {
     free.kept = kept;

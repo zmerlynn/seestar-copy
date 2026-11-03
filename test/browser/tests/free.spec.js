@@ -80,6 +80,36 @@ test('a preview groups the files by folder, and the confirm dialog cancels back 
   await expect(page.locator('#x-intro')).toBeFocused();
 });
 
+test('a different preview closes an open confirm dialog', async ({ page, startApp }) => {
+  // Another view's Find replaces the preview between two polls: the
+  // status answers the same files under the next id.
+  let replaced = false;
+  await page.route('**/app/api/status', async (route) => {
+    const response = await route.fetch();
+    const data = await response.json();
+    if (replaced && data.free.state === 'preview') data.free.id += 1;
+    await route.fulfill({ response, json: data });
+  });
+  const deletes = [];
+  page.on('request', (r) => {
+    if (r.url().endsWith('/app/api/delete') && r.postDataJSON().action === 'delete') deletes.push(r.postDataJSON());
+  });
+  await copied(page, startApp);
+  await find(page);
+  await page.locator('#x-groups tr').first().getByRole('checkbox').uncheck();
+  await deleteButton(page).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+
+  replaced = true;
+  await expect(dialog).toBeHidden();
+  await expect(page.locator('#x-cgo')).toBeHidden();
+  // The new preview's folders are all checked, and only a new confirm
+  // can delete them.
+  await expect(deleteButton(page)).toHaveText('Delete 7 files…');
+  expect(deletes).toEqual([]);
+});
+
 test('a settings save that changes a pattern clears the preview', async ({ page, startApp }) => {
   await copied(page, startApp);
   await trust(page).check();
