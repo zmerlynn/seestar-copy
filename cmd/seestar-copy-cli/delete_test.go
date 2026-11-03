@@ -262,8 +262,6 @@ func TestDeleteModes(t *testing.T) {
 
 // With --trust-state, the destination need not exist; without it, a
 // missing destination is a runtime failure that deletes nothing.
-const noDest = "destination not found; give --trust-state if the copies were moved or the drive is offline"
-
 func TestDeleteMissingDest(t *testing.T) {
 	const noDest = "destination not found; give --trust-state if the copies were moved or the drive is offline"
 	rec := stateRec{"MyWorks/a.fit", "aaa", deleteOld}
