@@ -10,7 +10,7 @@ test('the root lists folders before files, with a count', async ({ page }) => {
   await open(page, '', rootStatus);
   const names = await page.locator('#list tbody td.name').allTextContents();
   expect(names.slice(0, 2).sort()).toEqual(['Long names/', 'MyWorks/']);
-  expect(names.slice(2).sort()).toEqual(['empty.txt', 'notes.txt']);
+  expect(names.slice(2).sort()).toEqual(['00-notes.txt', 'empty.txt']);
 });
 
 test('the initial load does not move focus', async ({ page }) => {
@@ -50,6 +50,8 @@ test('folder links, breadcrumbs, Back and Forward navigate and focus the current
   await expect(page).toHaveURL(/\/\?path=MyWorks$/);
   await expect(currentCrumb(page)).toHaveText('MyWorks');
   await expect(currentCrumb(page)).toBeFocused();
+  await expect(statusLine(page)).toHaveText('1 folder, 0 files.');
+  await expect(link(page, 'M 31/')).toBeVisible();
 
   await page.locator('#crumbs').getByRole('link', { name: 'Share', exact: true }).click();
   await expect(statusLine(page)).toHaveText(rootStatus);
@@ -77,6 +79,7 @@ test('clicking a name or a thumbnail opens the image viewer', async ({ page }) =
   await expect(page.locator('#vname')).toHaveText('Stacked_M 31.jpg');
   await expect(image).toHaveAttribute('alt', 'Image preview of Stacked_M 31.jpg');
   expect(await loaded(image)).toBe(160);
+  await expect(image).toBeVisible();
   await expect(page.locator('#vnote')).toHaveText('');
   await expect(page.locator('#vtext')).toBeHidden();
   await page.locator('#vclose').click();
@@ -87,11 +90,12 @@ test('clicking a name or a thumbnail opens the image viewer', async ({ page }) =
   await expect(viewer(page)).toBeVisible();
   await expect(page.locator('#vname')).toHaveText('Stacked_M 31.jpg');
   expect(await loaded(image)).toBe(160);
+  await expect(image).toBeVisible();
 });
 
 test('a .txt opens as text', async ({ page }) => {
   await open(page, '', rootStatus);
-  await link(page, 'notes.txt').click();
+  await link(page, '00-notes.txt').click();
   await expect(viewer(page)).toBeVisible();
   await expect(page.locator('#vtext')).toHaveText('Seestar session notes\nM 31, 10 s subs, IR cut filter.');
   await expect(page.locator('#vnote')).toHaveText('');
@@ -113,6 +117,7 @@ test('a .fit shows its header cards up to END', async ({ page }) => {
     'EXPTIME =                 10.0',
     'END',
   ]);
+  await expect(page.locator('#vtext')).toBeVisible();
   await expect(page.locator('#vnote')).toHaveText('');
 });
 
@@ -155,7 +160,7 @@ test('Save is a download link styled like Close', async ({ page }) => {
 test('Close, Escape and a backdrop click close the viewer; a click inside does not', async ({ page }) => {
   await open(page, '', rootStatus);
   const reopen = async () => {
-    await link(page, 'notes.txt').click();
+    await link(page, '00-notes.txt').click();
     await expect(viewer(page)).toBeVisible();
     await expect(page.locator('#vtext')).toContainText('Seestar session notes');
   };

@@ -32,7 +32,7 @@ for (const colorScheme of ['light', 'dark']) {
     await close();
 
     await open(page, '', '2 folders, 2 files.');
-    await link(page, 'notes.txt').click();
+    await link(page, '00-notes.txt').click();
     await expect(page.locator('#vtext')).toContainText('Seestar session notes');
     await shot('viewer-text');
   });

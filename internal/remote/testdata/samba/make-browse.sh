@@ -7,7 +7,7 @@ root=$1
 m31="$root/MyWorks/M 31"
 long=Light_NGC7000_NorthAmericaNebula_mosaic_panel_01_of_12_10.0s_IRCUT_20261029-033119
 mkdir -p "$m31/Notes" "$root/Long names"
-printf 'Seestar session notes\nM 31, 10 s subs, IR cut filter.\n' > "$root/notes.txt"
+printf 'Seestar session notes\nM 31, 10 s subs, IR cut filter.\n' > "$root/00-notes.txt"
 : > "$root/empty.txt"
 printf 'Last session of the month.\n' > "$m31/Notes/log.txt"
 printf 'A file whose name has no place to break.\n' > "$root/Long names/${long}_${long}.txt"
