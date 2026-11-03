@@ -3,6 +3,9 @@ package main
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -111,9 +114,9 @@ func TestWindowStopsWithApp(t *testing.T) {
 	})
 }
 
-// TestWindowReturnWithoutStart checks that a window that fails before it
-// starts leaves no worker waiting.
-func TestWindowReturnWithoutStart(t *testing.T) {
+// TestWindowReturnErrorBeforeStart checks that a window that fails before
+// it starts returns its error without a native quit.
+func TestWindowReturnErrorBeforeStart(t *testing.T) {
 	want := errors.New("no webview")
 	called := false
 	err := runWindow(t.Context(), func() {}, func(windowCallbacks) windowActions {
@@ -121,5 +124,23 @@ func TestWindowReturnWithoutStart(t *testing.T) {
 	})
 	if err != want || called {
 		t.Errorf("runWindow = %v, quit called %v", err, called)
+	}
+}
+
+// TestBlockWindowAssets checks that Wails' own asset server and runtime
+// transport answer nothing, so every request goes to the app's server.
+func TestBlockWindowAssets(t *testing.T) {
+	h := blockWindowAssets(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Error("the request reached Wails")
+	}))
+	for _, r := range []*http.Request{
+		httptest.NewRequest("GET", "/index.html", nil),
+		httptest.NewRequest("POST", "/wails/runtime", strings.NewReader(`{"object":0,"method":0}`)),
+	} {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		if w.Code != http.StatusNotFound {
+			t.Errorf("%s %s = %d, want 404", r.Method, r.URL, w.Code)
+		}
 	}
 }

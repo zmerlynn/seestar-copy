@@ -1,6 +1,9 @@
 package main
 
-import "context"
+import (
+	"context"
+	"net/http"
+)
 
 // windowActions and windowCallbacks keep the native calls at one
 // boundary, so the tests run the same callbacks and worker as the window.
@@ -72,3 +75,8 @@ func runWindow(ctx context.Context, quit func(), create func(windowCallbacks) wi
 	// does not wait for the worker above.
 	return err
 }
+
+// blockWindowAssets keeps every request on the app's own loopback server,
+// which checks the token: Wails' asset server and runtime transport answer
+// nothing.
+func blockWindowAssets(http.Handler) http.Handler { return http.NotFoundHandler() }

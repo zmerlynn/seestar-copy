@@ -7,7 +7,6 @@ import (
 	_ "embed"
 	"io"
 	"log/slog"
-	"net/http"
 	"sync/atomic"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -82,8 +81,3 @@ func present(io.Writer) (func(context.Context, string, func()) error, *app.Nativ
 	}
 	return open, native
 }
-
-// blockWindowAssets keeps every request on the app's own loopback server,
-// which checks the token: Wails' asset server and runtime transport answer
-// nothing.
-func blockWindowAssets(http.Handler) http.Handler { return http.NotFoundHandler() }
