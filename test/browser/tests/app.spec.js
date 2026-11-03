@@ -302,3 +302,92 @@ for (const colorScheme of ['light', 'dark']) {
     await shot('settings');
   });
 }
+
+// The layouts DESIGN asks the app to survive: twice the text size, the
+// wider text spacing of WCAG 1.4.12, and a 480 px wide window.
+const layouts = {
+  'text-200': { width: 1280 },
+  'text-spacing': { width: 1280 },
+  'narrow-480': { width: 480 },
+};
+
+// restyle applies a layout's text changes to one document, through the
+// CSSOM, which the pages' style policy allows.
+async function restyle(target, layout) {
+  await target.evaluate((layout) => {
+    const all = [document.documentElement, ...document.querySelectorAll('*')];
+    if (layout === 'text-200') {
+      const sizes = all.map((el) => parseFloat(getComputedStyle(el).fontSize));
+      all.forEach((el, i) => el.style.setProperty('font-size', sizes[i] * 2 + 'px', 'important'));
+    }
+    if (layout === 'text-spacing') {
+      for (const el of all) {
+        el.style.setProperty('line-height', '1.5', 'important');
+        el.style.setProperty('letter-spacing', '0.12em', 'important');
+        el.style.setProperty('word-spacing', '0.16em', 'important');
+      }
+      for (const p of document.querySelectorAll('p')) p.style.setProperty('margin-bottom', '2em', 'important');
+    }
+  }, layout);
+}
+
+// fits checks that the page does not scroll sideways and that every
+// visible control is inside the window once scrolled to.
+async function fits(page) {
+  const width = page.viewportSize().width;
+  const [scrollWidth, clientWidth] = await page.evaluate(
+    () => [document.documentElement.scrollWidth, document.documentElement.clientWidth]);
+  expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
+  for (const control of await page.locator('button, input, textarea, iframe').filter({ visible: true }).all()) {
+    await control.scrollIntoViewIfNeeded();
+    const box = await control.boundingBox();
+    const name = await control.evaluate((el) => el.id || el.textContent);
+    expect(box.x, name).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width, name).toBeLessThanOrEqual(width + 0.5);
+  }
+}
+
+// tabsWrap checks that the tabs wrap rather than overflow.
+async function tabsWrap(page) {
+  const [wrap, overflows] = await page.locator('nav.tabs').evaluate(
+    (nav) => [getComputedStyle(nav).flexWrap, nav.scrollWidth > nav.clientWidth]);
+  expect(wrap).toBe('wrap');
+  expect(overflows).toBe(false);
+}
+
+for (const [layout, { width }] of Object.entries(layouts)) {
+  test(`the app fits with ${layout}`, async ({ page, startApp }, testInfo) => {
+    await page.setViewportSize({ width, height: 800 });
+    const shot = (name) => page.screenshot({
+      fullPage: true,
+      path: path.join(__dirname, '..', 'screenshots', `${testInfo.project.name}-app-${layout}-${name}.png`),
+    });
+
+    const setup = await startApp();
+    await openApp(page, setup.url);
+    await restyle(page, layout);
+    await fits(page);
+    await shot('setup');
+
+    const app = await startApp(setUp('/nowhere'));
+    await openApp(page, app.url);
+    await expect(browseStatus(page)).toHaveText(rootStatus);
+    const browse = await (await page.locator('#b-frame').elementHandle()).contentFrame();
+    await restyle(page, layout);
+    await restyle(browse, layout);
+    await fits(page);
+    await tabsWrap(page);
+    // Browse's table scrolls in its own box; its page does not widen.
+    const [scrollWidth, clientWidth, overflowX] = await browse.evaluate(() => [
+      document.documentElement.scrollWidth, document.documentElement.clientWidth,
+      getComputedStyle(document.querySelector('.scroll')).overflowX]);
+    expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
+    expect(overflowX).toBe('auto');
+    await shot('browse');
+
+    await tab(page, 'Settings').click();
+    await fits(page);
+    await tabsWrap(page);
+    await shot('settings');
+  });
+}
