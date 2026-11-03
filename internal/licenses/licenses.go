@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"io"
 	"runtime/debug"
+	"slices"
+	"strings"
 )
 
 // The catalog covers every release target, so one source tree cross-builds
@@ -27,7 +29,8 @@ type module struct {
 }
 
 // Write prints the project NOTICE and LICENSE, then the full license and
-// notice texts of each module linked into the running executable.
+// notice texts of each module linked into the running executable, then, for
+// the Linux window build, the notice of the native libraries it links.
 func Write(out io.Writer) error {
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
@@ -82,6 +85,22 @@ func writeForBuild(out io.Writer, info *debug.BuildInfo) error {
 				return err
 			}
 		}
+	}
+	// Module metadata lists no native libraries, so the Linux window's
+	// supplement is chosen by the build's own settings.
+	var goos, cgo, tags string
+	for _, setting := range info.Settings {
+		switch setting.Key {
+		case "GOOS":
+			goos = setting.Value
+		case "CGO_ENABLED":
+			cgo = setting.Value
+		case "-tags":
+			tags = setting.Value
+		}
+	}
+	if goos == "linux" && cgo == "1" && slices.Contains(strings.Split(tags, ","), "gui") {
+		return writeText(out, "native-linux/NOTICE")
 	}
 	return nil
 }
