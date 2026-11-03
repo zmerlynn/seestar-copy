@@ -42,6 +42,9 @@ textarea { min-height: 3.6rem; }
 .result.err { color: var(--err); }
 .path { overflow-wrap: anywhere; }
 .path .mono { user-select: all; }
+/* The line naming what a run looks at keeps one line, so the controls below
+   it stay put; its title holds the whole path. */
+.crawl { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .btn.small { font-size: 0.85em; padding: 0.1em 0.6em; margin-left: 0.3rem; }
 .tab:disabled { color: var(--muted); cursor: default; }
 .footer { margin-top: 1.5rem; border-top: 1px solid var(--line); padding-top: 0.7rem; }

@@ -221,6 +221,10 @@ test('the status region, bars and focus follow the stage, not each tick', async 
   v = { state: 'listing', title: 'Looking for new files… 4 folders checked.', path: 'Listing MyWorks/M 42…' };
   await expect(title(page)).toHaveText('Looking for new files… 4 folders checked.');
   await expect(path).toHaveText('Listing MyWorks/M 42…');
+  // It keeps one line, with the whole path in its title.
+  await expect(path).toHaveAttribute('title', 'Listing MyWorks/M 42…');
+  await expect(path).toHaveCSS('white-space', 'nowrap');
+  await expect(path).toHaveCSS('text-overflow', 'ellipsis');
   await expect(live).toHaveText('Looking for new files…');
 
   // Copying has a determinate bar with value and max, and per-file lines
@@ -355,6 +359,8 @@ test('a running preview has a bar and Cancel, which moves focus to the heading a
   v = { ...base, preview: { state: 'running', title: 'Looking for new files… 4 folders checked.', path: 'Listing MyWorks/M 31…' } };
   await expect(page.locator('#c-ptitle')).toHaveText('Looking for new files… 4 folders checked.');
   await expect(page.locator('#c-ppath')).toHaveText('Listing MyWorks/M 31…');
+  await expect(page.locator('#c-ppath')).toHaveAttribute('title', 'Listing MyWorks/M 31…');
+  await expect(page.locator('#c-ppath')).toHaveCSS('text-overflow', 'ellipsis');
   await expect(page.locator('#c-live')).toHaveText('Looking for new files… 3 folders checked.');
 
   // A preview that ends while Cancel has focus moves it to the result.

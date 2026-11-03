@@ -173,6 +173,10 @@ test('a check names the folder or file it is looking at, and announces only its 
   await expect(live).toHaveText('Checking files…');
   f = { state: 'checking', title: 'Checking files…', file: 'Listing MyWorks/M 31… (2 folders)' };
   await expect(file).toHaveText('Listing MyWorks/M 31… (2 folders)');
+  // It keeps one line, with the whole path in its title.
+  await expect(file).toHaveAttribute('title', 'Listing MyWorks/M 31… (2 folders)');
+  await expect(file).toHaveCSS('white-space', 'nowrap');
+  await expect(file).toHaveCSS('text-overflow', 'ellipsis');
   f = {
     state: 'checking', title: 'Checking 3 files…', progress: { done: 0, total: 9, text: 'Checking your copies: 0 B of 9 B' },
     file: 'Checking MyWorks/M 31/a.fit…',
