@@ -253,13 +253,6 @@ function row(...cells) {
   return tr;
 }
 
-// failedItem is a line for a file that can't be copied.
-function failedItem(f) {
-  const li = document.createElement('li');
-  li.textContent = f.path + ' — ' + f.reason;
-  return li;
-}
-
 // renderPreview shows the Copy tab's preview, if any, and its buttons in
 // the states Start shows in. A preview's state change is announced.
 function renderPreview(v, st) {
@@ -273,13 +266,10 @@ function renderPreview(v, st) {
   $('#c-pbusy').hidden = ps !== 'running';
   const groups = (p && p.groups) || [];
   $('#c-ptable').hidden = !groups.length;
-  const failed = (p && p.failures) || [];
-  $('#c-pfailed').hidden = !failed.length;
-  const key = JSON.stringify([groups, failed]);
+  const key = JSON.stringify(groups);
   if (key !== shown.pgroups) {
     shown.pgroups = key;
     list('#c-pgroups', groups, (g) => row(g.name, String(g.count), g.size));
-    list('#c-pfiles', failed, failedItem);
   }
   const off = SHOWS['#c-start'].includes(st);
   $('#c-pbtn').hidden = $('#c-pnote').hidden = !off || ps === 'running';
@@ -321,7 +311,11 @@ function renderCopy(v) {
   const files = JSON.stringify(v.failed || []);
   if (files !== shown.files) {
     shown.files = files;
-    list('#c-files', v.failed || [], failedItem);
+    list('#c-files', v.failed || [], (f) => {
+      const li = document.createElement('li');
+      li.textContent = f.path + ' — ' + f.reason;
+      return li;
+    });
   }
   for (const [sel, states] of Object.entries(SHOWS)) $(sel).hidden = !states.includes(st);
   // A stage change is announced; ticks within a stage are not.

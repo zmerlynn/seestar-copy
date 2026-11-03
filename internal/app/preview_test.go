@@ -101,9 +101,6 @@ func TestPreview(t *testing.T) {
 	if want := []string{"Share 1 1 B", "MyWorks/M 31 2 10 B", "MyWorks/M 42 2 10 B"}; strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Errorf("groups: got %q, want %q", got, want)
 	}
-	if len(v.Failures) != 2 || v.Failures[0].Path != "MyWorks/X.jpg" || !strings.Contains(v.Failures[0].Reason, "case") {
-		t.Errorf("failures: got %+v, want the case clash", v.Failures)
-	}
 	if after := snapshotDir(t, e.set.Folder); after != before {
 		t.Errorf("the folder changed:\nbefore %s\nafter  %s", before, after)
 	}

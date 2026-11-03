@@ -53,14 +53,14 @@ type previewStatus struct {
 	folders     int
 	err         error
 	// Done: what Start would do.
-	files    int // copies and replacements
-	bytes    int64
-	groups   []folderGroup
-	already  int // copied before, unchanged
-	adopt    int
-	wait     int
-	leftOut  int
-	failures []failure
+	files   int // copies and replacements
+	bytes   int64
+	groups  []folderGroup
+	already int // copied before, unchanged
+	adopt   int
+	wait    int
+	leftOut int
+	failed  int
 }
 
 func newPreviewer(parent context.Context, stateDir string, log *slog.Logger, dial func(context.Context, string) (remote.Session, error)) *previewer {
@@ -152,7 +152,7 @@ func decided(ds []plan.Decision, out engine.LeftOut) *previewStatus {
 		case d.Kind == plan.Wait:
 			st.wait++
 		case d.Kind == plan.Fail:
-			st.failures = append(st.failures, failure{d.Path, d.Reason})
+			st.failed++
 		}
 	}
 	st.groups = groupByFolder(func(yield func(string, int64) bool) {
@@ -196,12 +196,11 @@ func (p *previewer) quit() {
 
 // previewView is the Copy tab's preview and its text, for the page.
 type previewView struct {
-	State    string        `json:"state"`
-	Title    string        `json:"title"` // also the status region's text
-	Text     string        `json:"text,omitempty"`
-	Sub      string        `json:"sub,omitempty"`
-	Groups   []folderGroup `json:"groups,omitempty"`
-	Failures []failure     `json:"failures,omitempty"`
+	State  string        `json:"state"`
+	Title  string        `json:"title"` // also the status region's text
+	Text   string        `json:"text,omitempty"`
+	Sub    string        `json:"sub,omitempty"`
+	Groups []folderGroup `json:"groups,omitempty"`
 }
 
 // view is the preview as the page shows it; nil when there is none.
@@ -246,7 +245,7 @@ func (p *previewer) view() *previewView {
 			{st.already, "Already copied"},
 			{st.adopt, "Already in your folder"},
 			{st.wait, "Still being written"},
-			{len(st.failures), "Can't copy"},
+			{st.failed, "Can't copy"},
 			{st.leftOut, "Left out"},
 		} {
 			if c.n > 0 {
@@ -254,7 +253,7 @@ func (p *previewer) view() *previewView {
 			}
 		}
 		v.Sub = strings.Join(parts, " · ")
-		v.Groups, v.Failures = st.groups, st.failures
+		v.Groups = st.groups
 	}
 	return v
 }
