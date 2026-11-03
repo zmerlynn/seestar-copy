@@ -102,9 +102,10 @@ image, text and FITS viewers, Save, closing the viewer, a missing folder, a
 long name in a narrow window, and the favicon. They also save screenshots
 of the page in light and dark, which CI uploads. The app's tests start the
 browser-only `seestar-copy` themselves, each with its own settings file, and
-cover Setup, Settings and their field errors, Test's messages, the tabs, and
-the Browse tab, including a new address replacing it, and the layout at
-200% text, wider text spacing and 480 px wide. The tests need the Samba
+cover the first run, Settings and their field errors, the history and
+settings paths, Clear history, Test's messages, the tabs, and the Browse
+tab, including a new address replacing it, and the layout at 200% text,
+wider text spacing and 480 px wide. The tests need the Samba
 fixture's `browse` target, a tree of real files from `make-browse.sh`
 instead of `tree.txt`'s. To run them locally, with Node.js and Podman:
 
