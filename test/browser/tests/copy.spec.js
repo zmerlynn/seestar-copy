@@ -4,7 +4,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
-const { test, expect, share, env, tab, field, openApp, fakeStatus, longPath, copyViews } = require('./app');
+const { test, expect, share, refused, env, tab, field, openApp, fakeStatus, longPath, copyViews } = require('./app');
 
 // The browse tree has 7 files, all older than the first pass's age.
 const copiedAll = /^Copied 7 files \(\d.* in .*\.$/;
@@ -271,6 +271,89 @@ test('the status region, bars and focus follow the stage, not each tick', async 
   await expect(page.locator('#c-failed')).toBeHidden();
   await expect(page.locator('#hdot')).toHaveText("Can't reach");
   await expect(tab(page, 'Copy')).toBeFocused();
+});
+
+test('Preview shows what Start would copy by folder and copies nothing; Start discards it', async ({ page, startApp }) => {
+  const app = await startApp(copying(false));
+  await openApp(page, app.url);
+  await expect(title(page)).toHaveText(off);
+  const ptitle = page.locator('#c-ptitle');
+  await expect(page.locator('#c-preview')).toBeHidden();
+  await expect(page.locator('#c-pnote')).toHaveText('Nothing is copied until you start.');
+  await button(page, 'Preview').click();
+  await expect(ptitle).toHaveText(/^Would copy 7 files \(\d.*\)$/, { timeout: 30000 });
+  await expect(ptitle).toBeFocused();
+  await expect(page.locator('#c-live')).toHaveText(/^Would copy 7 files /);
+  await expect(page.locator('#c-psub')).toBeHidden();
+  await expect(page.locator('#c-pgroups tr')).toHaveCount(4);
+  await expect(page.locator('#c-pgroups tr').first()).toHaveText(/^Share2\d/);
+  await expect(page.locator('#c-pgroups tr').nth(2)).toHaveText(/^MyWorks\/M 313\d/);
+  await expect(page.locator('#c-pfailed')).toBeHidden();
+  await expect(title(page)).toHaveText(off);
+  await expect(page.locator('#hchip')).toHaveText('Copying is off');
+  expect(fs.existsSync(app.folder) ? fs.readdirSync(app.folder) : []).toEqual([]);
+  await page.getByText('Recent activity').click();
+  await expect(passes(page)).toHaveCount(0);
+
+  // Start copies and drops the preview; after it, nothing is left to copy.
+  await button(page, 'Start copying').click();
+  await expect(title(page)).toHaveText(upToDate, { timeout: 30000 });
+  await expect(page.locator('#c-preview')).toBeHidden();
+  await expect(button(page, 'Preview')).toBeHidden();
+  await button(page, 'Stop copying').click();
+  await expect(title(page)).toHaveText(off);
+  await button(page, 'Preview').click();
+  await expect(ptitle).toHaveText('Nothing to copy.', { timeout: 30000 });
+  await expect(page.locator('#c-psub')).toHaveText('Already copied 7');
+  await expect(page.locator('#c-ptable')).toBeHidden();
+});
+
+test('Saving a new selection discards the preview, and an unreachable telescope is worded as Copy words it', async ({ page, startApp }) => {
+  const app = await startApp(copying(false));
+  await openApp(page, app.url);
+  await button(page, 'Preview').click();
+  await expect(page.locator('#c-ptitle')).toHaveText(/^Would copy 7 files /, { timeout: 30000 });
+
+  await tab(page, 'Settings').click();
+  await field(page, 'Telescope address').fill(refused);
+  await button(page, 'Save').click();
+  await expect(page.locator('#f-saved')).toHaveText('Settings saved.');
+  await tab(page, 'Copy').click();
+  await expect(page.locator('#c-preview')).toBeHidden();
+
+  await button(page, 'Preview').click();
+  await expect(page.locator('#c-ptitle')).toHaveText(`Can't reach the telescope at ${refused}.`, { timeout: 30000 });
+  await expect(page.locator('#c-ptext')).toHaveText(/ Preview again to retry\.$/);
+  await expect(page.locator('#c-preview')).toHaveClass('notice err');
+  await expect(button(page, 'Preview')).toBeVisible();
+});
+
+test('a running preview has a bar and Cancel, and Cancel moves focus to the heading', async ({ page, startApp }) => {
+  const app = await startApp(copying(false));
+  let v = null;
+  await fakeStatus(page, () => v);
+  await openApp(page, app.url);
+  await expect(title(page)).toHaveText(off);
+  const base = { state: 'off', on: false, chip: 'Copying is off', title: off };
+  v = { ...base, preview: { state: 'running', title: 'Looking for new files… 3 folders checked.' } };
+  await expect(page.locator('#c-ptitle')).toHaveText('Looking for new files… 3 folders checked.');
+  await expect(page.locator('#c-live')).toHaveText('Looking for new files… 3 folders checked.');
+  await expect(page.locator('#c-pbusy')).toBeVisible();
+  await expect(page.locator('#c-pbusy')).toHaveAttribute('aria-label', 'Previewing');
+  await expect(button(page, 'Preview')).toBeHidden();
+  await expect(button(page, 'Start copying')).toBeVisible();
+  // Folder counts change the heading, not the status region.
+  v = { ...base, preview: { state: 'running', title: 'Looking for new files… 4 folders checked.' } };
+  await expect(page.locator('#c-ptitle')).toHaveText('Looking for new files… 4 folders checked.');
+  await expect(page.locator('#c-live')).toHaveText('Looking for new files… 3 folders checked.');
+
+  // Cancel goes to the app, which has no preview to drop.
+  v = null;
+  await button(page, 'Cancel').click();
+  await expect(page.locator('#c-preview')).toBeHidden();
+  await expect(button(page, 'Cancel')).toBeHidden();
+  await expect(button(page, 'Preview')).toBeVisible();
+  await expect(title(page)).toBeFocused();
 });
 
 for (const colorScheme of ['light', 'dark']) {

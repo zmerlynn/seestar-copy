@@ -224,7 +224,7 @@ const SHOWS = {
 const BUSY = { connecting: 'Connecting', listing: 'Looking for new files' };
 
 let copyOn = false;
-let shown = { state: '', contact: '', files: '', seq: -1 };
+let shown = { state: '', contact: '', files: '', seq: -1, preview: '', pgroups: '' };
 let pressed = null; // a button the user pressed, until the state after it is shown
 
 function text(sel, s) {
@@ -234,6 +234,58 @@ function text(sel, s) {
 function list(sel, items, li) {
   const ul = $(sel);
   ul.replaceChildren(...items.map(li));
+}
+
+// row is a table row for a folder: its cells end with the folder, a count
+// and a size.
+function row(...cells) {
+  const tr = document.createElement('tr');
+  const n = cells.length;
+  tr.append(
+    ...cells.map((c, i) => {
+      const td = document.createElement('td');
+      td.append(c);
+      if (i >= n - 2) td.className = 'num';
+      else if (i === n - 3) td.className = 'name';
+      return td;
+    }),
+  );
+  return tr;
+}
+
+// failedItem is a line for a file that can't be copied.
+function failedItem(f) {
+  const li = document.createElement('li');
+  li.textContent = f.path + ' — ' + f.reason;
+  return li;
+}
+
+// renderPreview shows the Copy tab's preview, if any, and its buttons in
+// the states Start shows in. A preview's state change is announced.
+function renderPreview(v, st) {
+  const p = v.preview;
+  const ps = p ? p.state : '';
+  $('#c-preview').hidden = !p;
+  $('#c-preview').className = ps === 'failed' ? 'notice err' : '';
+  text('#c-ptitle', p && p.title);
+  text('#c-ptext', p && p.text);
+  text('#c-psub', p && p.sub);
+  $('#c-pbusy').hidden = ps !== 'running';
+  const groups = (p && p.groups) || [];
+  $('#c-ptable').hidden = !groups.length;
+  const failed = (p && p.failures) || [];
+  $('#c-pfailed').hidden = !failed.length;
+  const key = JSON.stringify([groups, failed]);
+  if (key !== shown.pgroups) {
+    shown.pgroups = key;
+    list('#c-pgroups', groups, (g) => row(g.name, String(g.count), g.size));
+    list('#c-pfiles', failed, failedItem);
+  }
+  const off = SHOWS['#c-start'].includes(st);
+  $('#c-pbtn').hidden = $('#c-pnote').hidden = !off || ps === 'running';
+  $('#c-pcancel').hidden = ps !== 'running';
+  if (ps !== shown.preview && p) $('#c-live').textContent = p.title;
+  shown.preview = ps;
 }
 
 function renderCopy(v) {
@@ -269,16 +321,13 @@ function renderCopy(v) {
   const files = JSON.stringify(v.failed || []);
   if (files !== shown.files) {
     shown.files = files;
-    list('#c-files', v.failed || [], (f) => {
-      const li = document.createElement('li');
-      li.textContent = f.path + ' — ' + f.reason;
-      return li;
-    });
+    list('#c-files', v.failed || [], failedItem);
   }
   for (const [sel, states] of Object.entries(SHOWS)) $(sel).hidden = !states.includes(st);
   // A stage change is announced; ticks within a stage are not.
   if (st !== shown.state) $('#c-live').textContent = v.title;
   shown.state = st;
+  renderPreview(v, st);
   const chip = $('#hchip');
   chip.className = 'chip ' + (st === 'failures' ? 'warn' : v.on ? 'on' : 'off');
   chip.textContent = v.chip;
@@ -295,7 +344,7 @@ function renderCopy(v) {
   // heading; background updates never move focus.
   if (pressed && pressed.offsetParent === null) {
     const lost = document.activeElement === pressed || document.activeElement === document.body;
-    if (lost) (pressed.id === 's-stop' ? $('#f-addr') : $('#c-title')).focus();
+    if (lost) $(pressed.id === 's-stop' ? '#f-addr' : pressed.id === 'c-pbtn' && v.preview ? '#c-ptitle' : '#c-title').focus();
     pressed = null;
   }
 }
@@ -422,7 +471,6 @@ function renderFree(v) {
     free.trust = v.trust;
     free.groups = v.groups;
     list('#x-groups', v.groups, (g, i) => {
-      const tr = document.createElement('tr');
       const box = document.createElement('input');
       box.type = 'checkbox';
       box.checked = true;
@@ -444,14 +492,7 @@ function renderFree(v) {
         }),
       );
       details.append(summary, ul);
-      const cells = [box, details, String(g.files.length), g.size].map((c) => {
-        const td = document.createElement('td');
-        td.append(c);
-        return td;
-      });
-      cells[2].className = cells[3].className = 'num';
-      tr.append(...cells);
-      return tr;
+      return row(box, details, String(g.count), g.size);
     });
     count();
   }
@@ -605,6 +646,8 @@ form.addEventListener('submit', save);
 $('#c-start').addEventListener('click', (ev) => press(ev, 'start'));
 $('#c-check').addEventListener('click', (ev) => press(ev, 'check'));
 $('#c-stop').addEventListener('click', (ev) => press(ev, 'stop'));
+$('#c-pbtn').addEventListener('click', (ev) => press(ev, 'preview'));
+$('#c-pcancel').addEventListener('click', (ev) => press(ev, 'cancel'));
 $('#s-stop').addEventListener('click', (ev) => press(ev, 'stop'));
 $('#c-clip').addEventListener('click', (ev) =>
   clip(ev.currentTarget, [...$('#c-log').children].map((li) => li.textContent).join('\n')),
