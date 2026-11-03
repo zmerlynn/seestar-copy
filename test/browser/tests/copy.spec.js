@@ -319,6 +319,7 @@ test('Saving a new selection discards the preview, and an unreachable telescope 
   await expect(page.locator('#f-saved')).toHaveText('Settings saved.');
   await tab(page, 'Copy').click();
   await expect(page.locator('#c-preview')).toBeHidden();
+  await expect(page.locator('#c-live')).toHaveText(off);
 
   await button(page, 'Preview').click();
   await expect(page.locator('#c-ptitle')).toHaveText(`Can't reach the telescope at ${refused}.`, { timeout: 30000 });
@@ -327,7 +328,7 @@ test('Saving a new selection discards the preview, and an unreachable telescope 
   await expect(button(page, 'Preview')).toBeVisible();
 });
 
-test('a running preview has a bar and Cancel, and Cancel moves focus to the heading', async ({ page, startApp }) => {
+test('a running preview has a bar and Cancel, which moves focus to the heading and is announced', async ({ page, startApp }) => {
   const app = await startApp(copying(false));
   let v = null;
   await fakeStatus(page, () => v);
@@ -346,13 +347,23 @@ test('a running preview has a bar and Cancel, and Cancel moves focus to the head
   await expect(page.locator('#c-ptitle')).toHaveText('Looking for new files… 4 folders checked.');
   await expect(page.locator('#c-live')).toHaveText('Looking for new files… 3 folders checked.');
 
+  // A preview that ends while Cancel has focus moves it to the result.
+  await button(page, 'Cancel').focus();
+  v = { ...base, preview: { state: 'done', title: 'Would copy 2 files (2 B)' } };
+  await expect(page.locator('#c-ptitle')).toBeFocused();
+  await expect(page.locator('#c-live')).toHaveText('Would copy 2 files (2 B)');
+  await expect(button(page, 'Cancel')).toBeHidden();
+
   // Cancel goes to the app, which has no preview to drop.
+  v = { ...base, preview: { state: 'running', title: 'Looking for new files…' } };
+  await expect(button(page, 'Cancel')).toBeVisible();
   v = null;
   await button(page, 'Cancel').click();
   await expect(page.locator('#c-preview')).toBeHidden();
   await expect(button(page, 'Cancel')).toBeHidden();
   await expect(button(page, 'Preview')).toBeVisible();
   await expect(title(page)).toBeFocused();
+  await expect(page.locator('#c-live')).toHaveText('Preview canceled. Nothing was copied.');
 });
 
 for (const colorScheme of ['light', 'dark']) {

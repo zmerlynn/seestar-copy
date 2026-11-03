@@ -254,7 +254,8 @@ function row(...cells) {
 }
 
 // renderPreview shows the Copy tab's preview, if any, and its buttons in
-// the states Start shows in. A preview's state change is announced.
+// the states Start shows in. A preview's state change is announced, and so
+// is its going away: a Cancel, or Copy's title when it is discarded.
 function renderPreview(v, st) {
   const p = v.preview;
   const ps = p ? p.state : '';
@@ -273,8 +274,15 @@ function renderPreview(v, st) {
   }
   const off = SHOWS['#c-start'].includes(st);
   $('#c-pbtn').hidden = $('#c-pnote').hidden = !off || ps === 'running';
-  $('#c-pcancel').hidden = ps !== 'running';
+  // A preview that ends hides Cancel; focus on it moves to the result.
+  const cancel = $('#c-pcancel');
+  const lost = document.activeElement === cancel;
+  cancel.hidden = ps !== 'running';
+  if (lost && p && ps !== 'running') $('#c-ptitle').focus();
   if (ps !== shown.preview && p) $('#c-live').textContent = p.title;
+  else if (ps !== shown.preview && shown.preview) {
+    $('#c-live').textContent = pressed === cancel ? 'Preview canceled. Nothing was copied.' : v.title;
+  }
   shown.preview = ps;
 }
 
