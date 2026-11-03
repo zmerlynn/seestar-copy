@@ -54,10 +54,8 @@ type controller struct {
 	stateDir string
 	log      *slog.Logger // the loop's: it also feeds activity
 	activity *activity
-	// dial opens a pass's session, and run is engine.RunSync; tests
-	// replace them.
+	// dial opens a pass's session; tests replace it.
 	dial     func(ctx context.Context, endpoint string) (remote.Session, error)
-	run      func(ctx context.Context, o engine.SyncOptions, log *slog.Logger) error
 	checkNow chan struct{}
 
 	mu       sync.Mutex
@@ -105,7 +103,6 @@ func newController(parent context.Context, stateDir string, log *slog.Logger, di
 		parent: parent, stateDir: stateDir, activity: act,
 		log:      slog.New(newTee(log.Handler(), act)),
 		dial:     dial,
-		run:      engine.RunSync,
 		checkNow: make(chan struct{}),
 		st:       status{state: stOff},
 	}
@@ -136,7 +133,7 @@ func (c *controller) start(set Settings) error {
 	go func() {
 		ticks := time.NewTicker(time.Second)
 		ran := make(chan error, 1)
-		go func() { ran <- c.run(ctx, o, c.log) }()
+		go func() { ran <- engine.RunSync(ctx, o, c.log) }()
 		var err error
 	wait:
 		for {
