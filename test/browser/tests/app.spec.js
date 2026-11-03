@@ -184,6 +184,7 @@ test('Settings saves every field and keeps unknown keys', async ({ page, startAp
   expect(readSettings(app.file)).toEqual({
     version: 1, address: share, folder: app.folder, interval_minutes: 30,
     excludes: ['Video', '/Preview'], includes: ['MyWorks'], skip_built_in: false, start_copying: false,
+    older_than_days: 7, trust_state: false,
     later: { kept: true },
   });
   // A reload shows what was saved.
