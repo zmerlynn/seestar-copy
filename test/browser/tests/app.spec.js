@@ -80,7 +80,7 @@ test("the first-run line's Save and continue saves as Save does", async ({ page,
   await field(page, 'Folder for your images').fill(app.folder);
   await expect(go).toBeEnabled();
 
-  // A failed save is off while it runs, and its message scrolls into view.
+  // A failed save is off while it runs, and its message takes focus.
   let release;
   const held = new Promise((resolve) => (release = resolve));
   await page.route('**/app/api/settings', async (route) => {
@@ -95,6 +95,7 @@ test("the first-run line's Save and continue saves as Save does", async ({ page,
     release();
   }
   await expect(page.locator('#f-saved')).toHaveText("Couldn't save settings. Your changes have not been saved. Try saving again.");
+  await expect(page.locator('#f-saved')).toBeFocused();
   await expect(page.locator('#f-saved')).toBeInViewport();
   await expect(go).toBeEnabled();
   await page.unroute('**/app/api/settings');

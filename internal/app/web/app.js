@@ -168,8 +168,8 @@ async function saveForm() {
   showErrors({});
   if (status !== 200 || !data) {
     result('#f-saved', (data && data.error) || "Couldn't save settings. Your changes have not been saved. Try saving again.", 'err');
-    // Save and continue is at the top, so the answer scrolls into view.
-    $('#f-saved').scrollIntoView({ block: 'nearest' });
+    // Focus brings the answer into view, below the form.
+    $('#f-saved').focus();
     return;
   }
   const changed = !saved || saved.address !== data.settings.address;
