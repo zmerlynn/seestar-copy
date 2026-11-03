@@ -288,6 +288,9 @@ test('Preview shows what Start would copy by folder and copies nothing; Start di
   await expect(page.locator('#c-pgroups tr')).toHaveCount(4);
   await expect(page.locator('#c-pgroups tr').first()).toHaveText(/^Share2\d/);
   await expect(page.locator('#c-pgroups tr').nth(2)).toHaveText(/^MyWorks\/M 313\d/);
+  // The buttons stay above the folder rows, however many there are.
+  const start = await button(page, 'Start copying').boundingBox();
+  expect(start.y).toBeLessThan((await page.locator('#c-ptable').boundingBox()).y);
   await expect(title(page)).toHaveText(off);
   await expect(page.locator('#hchip')).toHaveText('Copying is off');
   expect(fs.existsSync(app.folder) ? fs.readdirSync(app.folder) : []).toEqual([]);
