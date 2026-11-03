@@ -40,10 +40,12 @@ func (e *previewEnv) run() *previewView {
 	e.p.mu.Lock()
 	done := e.p.done
 	e.p.mu.Unlock()
-	select {
-	case <-done:
-	case <-time.After(10 * time.Second):
-		e.t.Fatal("the preview did not end")
+	if done != nil {
+		select {
+		case <-done:
+		case <-time.After(10 * time.Second):
+			e.t.Fatal("the preview did not end")
+		}
 	}
 	return e.p.view()
 }
