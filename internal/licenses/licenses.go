@@ -12,8 +12,6 @@ import (
 	"fmt"
 	"io"
 	"runtime/debug"
-	"slices"
-	"strings"
 )
 
 // The catalog covers every release target, so one source tree cross-builds
@@ -86,20 +84,18 @@ func writeForBuild(out io.Writer, info *debug.BuildInfo) error {
 			}
 		}
 	}
-	// Module metadata lists no native libraries, so the Linux window's
-	// supplement is chosen by the build's own settings.
-	var goos, cgo, tags string
+	// Module metadata lists no native libraries: a Linux cgo build that
+	// links Wails links GTK and WebKitGTK.
+	var goos, cgo string
 	for _, setting := range info.Settings {
 		switch setting.Key {
 		case "GOOS":
 			goos = setting.Value
 		case "CGO_ENABLED":
 			cgo = setting.Value
-		case "-tags":
-			tags = setting.Value
 		}
 	}
-	if goos == "linux" && cgo == "1" && slices.Contains(strings.Split(tags, ","), "gui") {
+	if goos == "linux" && cgo == "1" && linked["github.com/wailsapp/wails/v3"] {
 		return writeText(out, "native-linux/NOTICE")
 	}
 	return nil

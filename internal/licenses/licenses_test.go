@@ -91,22 +91,26 @@ func TestOnlyLinkedModules(t *testing.T) {
 }
 
 // The GTK and WebKitGTK notice is printed by the Linux window build only,
-// which is the one build that links them.
+// which is the one build that links them: a Linux cgo build that links
+// Wails. Tags alone don't select it.
 func TestNativeLinuxNotice(t *testing.T) {
 	_, native := noticeParts(t)
+	const wails = "github.com/wailsapp/wails/v3"
 	for _, c := range []struct {
-		goos, cgo, tags string
-		want            bool
+		goos, cgo, tags, dep string
+		want                 bool
 	}{
-		{"linux", "1", "gui,production", true},
-		{"linux", "1", "production,gui", true},
-		{"linux", "0", "gui,production", false},
-		{"linux", "1", "", false},
-		{"linux", "1", "guitest", false},
-		{"darwin", "1", "gui,production", false},
-		{"windows", "0", "gui,production", false},
+		{"linux", "1", "gui,production", wails, true},
+		{"linux", "1", "", wails, true},
+		{"linux", "1", "gui,production", "github.com/spf13/pflag", false},
+		{"linux", "0", "gui,production", wails, false},
+		{"darwin", "1", "gui,production", wails, false},
+		{"windows", "0", "gui,production", wails, false},
 	} {
-		info := &debug.BuildInfo{Settings: []debug.BuildSetting{{Key: "GOOS", Value: c.goos}, {Key: "CGO_ENABLED", Value: c.cgo}}}
+		info := &debug.BuildInfo{
+			Deps:     []*debug.Module{{Path: c.dep}},
+			Settings: []debug.BuildSetting{{Key: "GOOS", Value: c.goos}, {Key: "CGO_ENABLED", Value: c.cgo}},
+		}
 		if c.tags != "" {
 			info.Settings = append(info.Settings, debug.BuildSetting{Key: "-tags", Value: c.tags})
 		}
