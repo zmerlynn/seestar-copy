@@ -28,10 +28,12 @@ var writeNames = map[string]bool{
 }
 
 // allowed lists functions, as "<dir>.<name>" with the directory relative to
-// the repository root, that change the local filesystem without calling
-// Check, each with the reason. It is empty: every such function is guarded.
-// scripts/ is outside the scan, and so are _test.go files and vendor/.
-var allowed = map[string]string{}
+// the repository root, that the scan matches but that do not change the
+// local filesystem without calling Check, each with the reason. scripts/ is
+// outside the scan, and so are _test.go files and vendor/.
+var allowed = map[string]string{
+	"cmd/seestar-copy.present": "Wails' Dialog.OpenFile shows the folder picker; it opens no file",
+}
 
 // TestWritesAreGuarded checks, without type information, the rule this
 // package rests on: every function under internal/ and cmd/ whose body
