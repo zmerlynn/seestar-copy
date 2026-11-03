@@ -79,6 +79,87 @@ jobs:
           "./$binary" --version
           "./$binary" sync --help
 
+  window:
+    # The app's window on each OS's own webview. macOS and Linux need cgo, so
+    # only these runners build it; check-go.sh cross-builds Windows.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-26, windows-2025, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.3'
+          cache: false
+      - name: Install Linux native dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libgtk-4-dev libwebkitgtk-6.0-dev bubblewrap xvfb xauth dbus-x11
+          # Ubuntu restricts the unprivileged user namespaces WebKit's
+          # sandbox needs; lift that for this job.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Build and vet the window
+        run: |
+          ext=''; ldflags=''
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            export CGO_ENABLED=0
+            ext=.exe; ldflags='-H windowsgui'
+          else
+            export CGO_ENABLED=1
+            if [[ "$RUNNER_OS" == macOS ]]; then
+              export CC="$PWD/scripts/gui-mac-clang.sh" MACOSX_DEPLOYMENT_TARGET=13.0
+            fi
+          fi
+          go vet -tags gui,production ./...
+          go build -tags gui,production -ldflags="$ldflags" -o "$RUNNER_TEMP/seestar-copy$ext" ./cmd/seestar-copy
+          echo "WINDOW_BIN=$RUNNER_TEMP/seestar-copy$ext" >> "$GITHUB_ENV"
+      - name: Open the window, load Browse and quit
+        run: |
+          cat > "$RUNNER_TEMP/window.py" <<'PY'
+          import json, os, socket, subprocess, sys
+          tmp = os.environ["RUNNER_TEMP"]
+          # Browse dials the saved address once the page and its frame have
+          # loaded, so a connection here shows the window works end to end.
+          device = socket.create_server(("127.0.0.1", 0))
+          device.settimeout(120)
+          settings = os.path.join(tmp, "app.json")
+          with open(settings, "w") as f:
+              json.dump({"version": 1, "address": "127.0.0.1:%d" % device.getsockname()[1], "folder": os.path.join(tmp, "images")}, f)
+          log = open(os.path.join(tmp, "window.log"), "w")
+          app = subprocess.Popen([os.environ["WINDOW_BIN"], "--settings", settings], stdout=log, stderr=log)
+          try:
+              device.accept()[0].close()
+          except TimeoutError:
+              app.kill()
+              sys.exit("the window never loaded Browse")
+          print("Browse loaded in the window")
+          # Closing the window (WM_CLOSE on Windows) or SIGTERM quits the app.
+          if os.name == "nt":
+              subprocess.run(["taskkill", "/PID", str(app.pid)], check=True)
+          else:
+              app.terminate()
+          code = app.wait(timeout=60)
+          sys.exit("the app exited %d" % code if code else 0)
+          PY
+          python=$(command -v python3 || command -v python)
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1280x900x24' "$python" "$RUNNER_TEMP/window.py"
+          else
+            "$python" "$RUNNER_TEMP/window.py"
+          fi
+      - name: App log
+        if: failure()
+        run: cat "$RUNNER_TEMP/window.log" || true
+
   smb:
     runs-on: ubuntu-24.04
     steps:
