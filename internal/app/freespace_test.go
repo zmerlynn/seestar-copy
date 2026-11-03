@@ -232,6 +232,39 @@ func TestFreeConfirmRefused(t *testing.T) {
 	}
 }
 
+// A preview cleared or replaced after Delete's check but before its start
+// is refused, and no remover is opened.
+func TestFreeConfirmRace(t *testing.T) {
+	for name, change := range map[string]func(e *freeEnv){
+		"cleared": func(e *freeEnv) { e.f.clear() },
+		"replaced": func(e *freeEnv) {
+			if err := e.f.find(e.set); err != nil {
+				e.t.Fatal(err)
+			}
+			e.wait(frPreview)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			e := newFreeEnv(t, "MyWorks/a.jpg")
+			e.copy()
+			v := e.preview()
+			opened := 0
+			e.f.remover = func(ctx context.Context, endpoint string) (remote.Remover, error) {
+				opened++
+				return e.share()
+			}
+			e.f.prepared = func() { change(e) }
+			if err := e.f.confirm(v.ID, []string{"MyWorks"}); !errors.Is(err, errStale) {
+				t.Errorf("confirm: %v, want errStale", err)
+			}
+			e.f.quit()
+			if opened != 0 || !e.has("MyWorks/a.jpg") {
+				t.Errorf("remover opened %d times; a.jpg on the share: %v", opened, e.has("MyWorks/a.jpg"))
+			}
+		})
+	}
+}
+
 // A Save that changes what a preview depends on clears it, and ends a
 // running check at Start; a cancelled check ends there without a notice.
 func TestFreeStaleClearing(t *testing.T) {

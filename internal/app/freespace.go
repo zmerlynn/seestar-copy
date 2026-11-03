@@ -30,6 +30,9 @@ type freer struct {
 	// replace them.
 	dial    func(ctx context.Context, endpoint string) (remote.Session, error)
 	remover func(ctx context.Context, endpoint string) (remote.Remover, error)
+	// prepared, if set, runs after a confirm's preparation and before its
+	// start; tests change the preview there.
+	prepared func()
 
 	mu       sync.Mutex
 	cancel   context.CancelFunc // nil when nothing runs
@@ -61,12 +64,17 @@ func (f *freer) options(set Settings) (engine.DeleteOptions, error) {
 }
 
 // run starts o in its own goroutine, with st as the new status, and calls
-// end with the outcome once the run has returned. stop is a delete's.
-func (f *freer) run(st freeStatus, o engine.DeleteOptions, stop chan struct{}, end func(engine.DeleteResult, error, bool)) error {
+// end with the outcome once the run has returned. A delete passes its stop
+// and the preview id it consumes, which must still be the one shown: the
+// check and the move to Deleting are one step under f.mu.
+func (f *freer) run(st freeStatus, o engine.DeleteOptions, stop chan struct{}, id int, end func(engine.DeleteResult, error, bool)) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.done != nil || f.quitting {
 		return errFreeBusy
+	}
+	if id != 0 && (f.st.state != frPreview || f.st.id != id) {
+		return errStale
 	}
 	ctx, cancel := context.WithCancel(f.parent)
 	done := make(chan struct{})
@@ -104,7 +112,7 @@ func (f *freer) find(set Settings) error {
 			f.st.hashed, f.st.toHash = done, total
 		},
 	}
-	return f.run(freeStatus{state: frChecking, set: set}, o, nil, func(r engine.DeleteResult, err error, canceled bool) {
+	return f.run(freeStatus{state: frChecking, set: set}, o, nil, 0, func(r engine.DeleteResult, err error, canceled bool) {
 		st := &f.st
 		switch {
 		case canceled || st.stale:
@@ -153,11 +161,13 @@ func (f *freer) confirm(id int, folders []string) error {
 			f.st.current = p
 		},
 	}
-	// A Save between the check above and this start is a rare race; the
-	// run then uses the preview's settings, as a check already running
-	// does.
+	if f.prepared != nil {
+		f.prepared()
+	}
+	// run checks again that the preview is still the one shown: a Save
+	// since the check above has cleared it.
 	next := freeStatus{state: frDeleting, set: st.set, total: len(only)}
-	return f.run(next, o, make(chan struct{}), func(r engine.DeleteResult, err error, _ bool) {
+	return f.run(next, o, make(chan struct{}), id, func(r engine.DeleteResult, err error, _ bool) {
 		st := &f.st
 		st.result, st.err, st.current = r, err, ""
 		switch {
