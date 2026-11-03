@@ -121,7 +121,8 @@ func (p *previewer) start(set Settings) error {
 		defer p.mu.Unlock()
 		st := &p.st
 		switch {
-		case canceled:
+		case canceled || st.state != pvRunning:
+			// Canceled, or discarded after the run returned.
 			*st = previewStatus{}
 		case result != nil:
 			result.state, result.endpoint = pvDone, st.endpoint

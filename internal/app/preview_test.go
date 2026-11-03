@@ -216,6 +216,44 @@ func TestPreviewDiscard(t *testing.T) {
 	}
 }
 
+// onClose is a session that calls f as the dry run closes it, after its
+// decisions.
+type onClose struct {
+	remote.Session
+	f func()
+}
+
+func (s onClose) Close() error {
+	s.f()
+	return s.Session.Close()
+}
+
+// A preview discarded as its run returns stays discarded: the run doesn't
+// publish its result, nor its failure.
+func TestPreviewDiscardAtEnd(t *testing.T) {
+	for _, name := range []string{"done", "failed"} {
+		t.Run(name, func(t *testing.T) {
+			e := newPreviewEnv(t, fstest.MapFS{"MyWorks/a.jpg": image("a")})
+			e.p.dial = func(ctx context.Context, endpoint string) (remote.Session, error) {
+				s, err := e.c.dial(ctx, endpoint)
+				if name == "failed" {
+					s = failDir{s, "MyWorks"}
+				}
+				// The preview is dropped, but its context is canceled
+				// only after the run sees it wasn't.
+				return onClose{s, func() {
+					e.p.mu.Lock()
+					e.p.st = previewStatus{}
+					e.p.mu.Unlock()
+				}}, err
+			}
+			if v := e.run(); v != nil {
+				t.Errorf("got %+v, want none", v)
+			}
+		})
+	}
+}
+
 // The listing's progress shows as Copy's does.
 func TestPreviewListing(t *testing.T) {
 	e := newPreviewEnv(t, nil)
