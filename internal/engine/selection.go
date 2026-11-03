@@ -40,10 +40,10 @@ type LeftOut struct {
 	// Unmatched counts the entries that no include could select and that
 	// no exclude matched. A folder counts once; what is in it is not listed.
 	Unmatched int
-	// KeptParents holds the parent of every entry left out, for either
+	// keptParents holds the parent of every entry left out, for either
 	// reason: a folder with something in it that the walk did not list.
 	// The root is ".".
-	KeptParents map[string]bool
+	keptParents map[string]bool
 }
 
 // Skipped is a listed entry that an exclude matched.
@@ -58,18 +58,18 @@ type Skipped struct {
 // read. Any listing failure, of the root or of a folder that is kept, fails
 // the walk; what was left out before it is still returned.
 func (s Selector) Walk(ctx context.Context, sess remote.Session) ([]remote.Entry, LeftOut, error) {
-	out := LeftOut{KeptParents: map[string]bool{}}
+	out := LeftOut{keptParents: map[string]bool{}}
 	entries, err := sess.Walk(ctx, func(p string, dir bool) bool {
 		for _, e := range s.Excludes {
 			if e.match(p) {
 				out.Skipped = append(out.Skipped, Skipped{p, e.flag})
-				out.KeptParents[path.Dir(p)] = true
+				out.keptParents[path.Dir(p)] = true
 				return true
 			}
 		}
 		if !s.included(p, dir) {
 			out.Unmatched++
-			out.KeptParents[path.Dir(p)] = true
+			out.keptParents[path.Dir(p)] = true
 			return true
 		}
 		return false

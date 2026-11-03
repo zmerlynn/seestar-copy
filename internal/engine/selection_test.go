@@ -190,7 +190,7 @@ func TestWalkKeptParents(t *testing.T) {
 	// .DS_Store is excluded at the root, x.fit and z.fit miss the include,
 	// .hidden is excluded, and /MyWorks/skip is excluded as a whole.
 	want := map[string]bool{".": true, "MyWorks": true, "MyWorks/a": true, "MyWorks/c": true, "MyWorks/d/e": true}
-	if !maps.Equal(out.KeptParents, want) {
-		t.Errorf("KeptParents = %v, want %v", out.KeptParents, want)
+	if !maps.Equal(out.keptParents, want) {
+		t.Errorf("keptParents = %v, want %v", out.keptParents, want)
 	}
 }
