@@ -76,4 +76,43 @@ async function openApp(page, url) {
   await expect(page.locator('#loading')).toBeHidden();
 }
 
-module.exports = { test, expect, share, refused, env, readSettings, frame, browseStatus, tab, field, openApp };
+// fakeStatus answers the page's status polls with the real status, its
+// copy view replaced by view() when that returns one. A view's activity,
+// if any, replaces Recent activity.
+async function fakeStatus(page, view) {
+  await page.route('**/app/api/status', async (route) => {
+    const response = await route.fetch();
+    const data = await response.json();
+    const v = view();
+    if (v) {
+      const { activity, ...copy } = v;
+      data.copy = { on: true, contact: 'ok', chip: 'Copying', ...copy };
+      if (activity) Object.assign(data, { activity, activity_seq: activity.length });
+    }
+    await route.fulfill({ response, json: data });
+  });
+}
+
+// Synthetic Copy views of an active pass, with a long path in flight and
+// failed, for screenshots and layouts.
+const longPath = 'MyWorks/NGC 7000 North America Nebula/Stacked_210_NGC7000_10.0s_IRCUT_' + '20261029-033119'.repeat(4) + '.fit';
+const copyViews = {
+  copying: {
+    state: 'copying', title: 'Copying 3 of 12 files',
+    progress: {
+      done: 1200, total: 4000, bytes: '1.2 GB of 4.0 GB', speed: '9.8 MB/s', left: 'About 5 min left', found: 'Found already in your folder: 3',
+      flight: [{ path: longPath, percent: 40 }, { path: 'MyWorks/M 31/Stacked_M 31.jpg', percent: 5 }],
+    },
+  },
+  failures: {
+    state: 'failures', title: 'Check finished with 1 file not copied. Next check at 21:40.', chip: '1 file not copied',
+    summary: 'Copied 11 files (3.9 GB) in 7 min. 1 failed.',
+    notice: '1 file couldn\'t be copied. It will be tried again at the next check.',
+    failed: [{ path: longPath, reason: "The telescope's file changed size while copying" }],
+    activity: [{ time: '21:35:02', warn: true, text: `copy failed path="${longPath}" err="the connection was reset"` }],
+  },
+};
+
+module.exports = {
+  test, expect, share, refused, env, readSettings, frame, browseStatus, tab, field, openApp, fakeStatus, longPath, copyViews,
+};

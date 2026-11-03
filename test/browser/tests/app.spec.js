@@ -2,7 +2,7 @@
 // tab, against the browser-only app and the Samba fixture's browse tree.
 // The Copy tab's tests are in copy.spec.js.
 const path = require('node:path');
-const { test, expect, share, refused, readSettings, frame, browseStatus, tab, field, openApp } = require('./app');
+const { test, expect, share, refused, readSettings, frame, browseStatus, tab, field, openApp, fakeStatus, copyViews } = require('./app');
 
 const rootStatus = '2 folders, 2 files.';
 const connected = /^Connected\. The telescope's share has the folders (Long names and MyWorks|MyWorks and Long names)\.$/;
@@ -412,5 +412,21 @@ for (const [layout, { width }] of Object.entries(layouts)) {
     await fits(page);
     await tabsWrap(page);
     await shot('settings');
+
+    // An active pass, with long paths in flight and failed, and the lists
+    // open.
+    let v = null;
+    await fakeStatus(page, () => v);
+    for (const [name, view] of Object.entries(copyViews)) {
+      v = view;
+      await page.reload();
+      await expect(page.locator('#loading')).toBeHidden();
+      await expect(page.locator('#c-title')).toHaveText(view.title);
+      if (view.failed) await page.getByText('Show files').click();
+      if (view.activity) await page.getByText('Recent activity').click();
+      await restyle(page, layout);
+      await fits(page);
+      await shot('copy-' + name);
+    }
   });
 }

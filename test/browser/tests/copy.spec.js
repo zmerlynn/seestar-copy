@@ -4,7 +4,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
-const { test, expect, share, env, tab, field, openApp } = require('./app');
+const { test, expect, share, env, tab, field, openApp, fakeStatus, longPath, copyViews } = require('./app');
 
 // The browse tree has 7 files, all older than the first pass's age.
 const copiedAll = /^Copied 7 files \(\d.* in .*\.$/;
@@ -151,18 +151,6 @@ test('a second app on the same folder shows Folder in use until the first stops'
   await expect(title(other)).toBeFocused();
 });
 
-// fakeStatus answers the page's status polls with the real status, its
-// copy view replaced by view() when that returns one.
-async function fakeStatus(page, view) {
-  await page.route('**/app/api/status', async (route) => {
-    const response = await route.fetch();
-    const data = await response.json();
-    const v = view();
-    if (v) data.copy = { on: true, contact: 'ok', chip: 'Copying', ...v };
-    await route.fulfill({ response, json: data });
-  });
-}
-
 test('the status region, bars and focus follow the stage, not each tick', async ({ page, startApp }) => {
   const app = await startApp(copying(false));
   let v = null;
@@ -262,21 +250,10 @@ for (const colorScheme of ['light', 'dark']) {
     await openApp(page, app.url);
     await expect(title(page)).toHaveText(off);
     await shot('off');
-    v = {
-      state: 'copying', title: 'Copying 3 of 12 files',
-      progress: {
-        done: 1200, total: 4000, bytes: '1.2 GB of 4.0 GB', speed: '9.8 MB/s', left: 'About 5 min left', found: '',
-        flight: [{ path: 'MyWorks/M 31/Stacked_M 31.fit', percent: 40 }, { path: 'MyWorks/M 31/Stacked_M 31.jpg', percent: 5 }],
-      },
-    };
-    await expect(title(page)).toHaveText('Copying 3 of 12 files');
+    v = copyViews.copying;
+    await expect(page.locator('#c-flight li').first()).toHaveText(longPath + '40%');
     await shot('copying');
-    v = {
-      state: 'failures', title: 'Check finished with 1 file not copied. Next check at 21:40.', chip: '1 file not copied',
-      summary: 'Copied 11 files (3.9 GB) in 7 min. 1 failed.',
-      notice: '1 file couldn\'t be copied. It will be tried again at the next check.',
-      failed: [{ path: 'MyWorks/M 31/Stacked_M 31.fit', reason: 'the connection was reset' }],
-    };
+    v = copyViews.failures;
     await expect(page.locator('#c-failed')).toBeVisible();
     await page.getByText('Show files').click();
     await shot('failures');
