@@ -113,7 +113,9 @@ func TestPreview(t *testing.T) {
 	}
 }
 
-// snapshotDir describes every entry under root: path, mode, size and mtime.
+// snapshotDir describes every entry under root: path, mode, size and, for
+// files, mtime. Windows updates a folder's mtime late, after the file
+// written into it, so a folder is described by its entries.
 func snapshotDir(t *testing.T, root string) string {
 	t.Helper()
 	var b strings.Builder
@@ -125,7 +127,11 @@ func snapshotDir(t *testing.T, root string) string {
 		if err != nil {
 			return err
 		}
-		b.WriteString(p + " " + fi.Mode().String() + " " + num(int(fi.Size())) + " " + fi.ModTime().String() + "\n")
+		b.WriteString(p + " " + fi.Mode().String() + " " + num(int(fi.Size())))
+		if !d.IsDir() {
+			b.WriteString(" " + fi.ModTime().String())
+		}
+		b.WriteString("\n")
 		return nil
 	})
 	if err != nil {
