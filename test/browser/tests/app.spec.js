@@ -2,7 +2,7 @@
 // tab, against the browser-only app and the Samba fixture's browse tree.
 // The Copy tab's tests are in copy.spec.js.
 const path = require('node:path');
-const { test, expect, share, refused, readSettings, frame, browseStatus, tab, field, openApp, fakeStatus, copyViews } = require('./app');
+const { test, expect, share, refused, readSettings, frame, browseStatus, tab, field, openApp, fakeStatus, copyViews, freeViews } = require('./app');
 
 const rootStatus = '2 folders, 2 files.';
 const connected = /^Connected\. The telescope's share has the folders (Long names and MyWorks|MyWorks and Long names)\.$/;
@@ -127,12 +127,15 @@ test('the tabs follow the tab pattern', async ({ page, startApp }) => {
   await openApp(page, app.url);
   const copy = tab(page, 'Copy');
   const browse = tab(page, 'Browse');
+  const free = tab(page, 'Free up space');
   const settings = tab(page, 'Settings');
   await expect(copy).toHaveAttribute('aria-selected', 'true');
   await expect(copy).toHaveAttribute('tabindex', '0');
   await expect(browse).toHaveAttribute('tabindex', '-1');
+  await expect(free).toHaveAttribute('tabindex', '-1');
   await expect(settings).toHaveAttribute('tabindex', '-1');
   await expect(page.locator('#p-browse')).toBeHidden();
+  await expect(page.locator('#p-free')).toBeHidden();
   await expect(page.locator('#p-settings')).toBeHidden();
 
   await copy.focus();
@@ -141,6 +144,9 @@ test('the tabs follow the tab pattern', async ({ page, startApp }) => {
   await expect(browse).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('tabpanel', { name: 'Browse' })).toBeVisible();
   await expect(page.locator('#p-copy')).toBeHidden();
+  await page.keyboard.press('ArrowRight');
+  await expect(free).toBeFocused();
+  await expect(page.getByRole('tabpanel', { name: 'Free up space' })).toBeVisible();
   await page.keyboard.press('ArrowRight');
   await expect(settings).toBeFocused();
   await expect(page.getByRole('tabpanel', { name: 'Settings' })).toBeVisible();
@@ -408,6 +414,11 @@ for (const [layout, { width }] of Object.entries(layouts)) {
     expect(overflowX).toBe('auto');
     await shot('browse');
 
+    await tab(page, 'Free up space').click();
+    await fits(page);
+    await tabsWrap(page);
+    await shot('free');
+
     await tab(page, 'Settings').click();
     await fits(page);
     await tabsWrap(page);
@@ -427,6 +438,30 @@ for (const [layout, { width }] of Object.entries(layouts)) {
       await restyle(page, layout);
       await fits(page);
       await shot('copy-' + name);
+    }
+
+    // Free up space's states, with a long path, its lists open and the
+    // confirm dialog.
+    v = null;
+    let f = null;
+    await fakeStatus(page, () => v, () => f);
+    for (const [name, view] of Object.entries(freeViews)) {
+      f = view;
+      await page.reload();
+      await expect(page.locator('#loading')).toBeHidden();
+      await tab(page, 'Free up space').click();
+      await expect(page.locator('#x-title')).toHaveText(view.title);
+      for (const s of await page.locator('#p-free summary').filter({ visible: true }).all()) await s.click();
+      await restyle(page, layout);
+      await fits(page);
+      await shot('free-' + name);
+      if (name === 'preview') {
+        await page.locator('#x-go').click();
+        await expect(page.getByRole('dialog')).toBeVisible();
+        await fits(page);
+        await shot('free-confirm');
+        await page.keyboard.press('Escape');
+      }
     }
   });
 }
