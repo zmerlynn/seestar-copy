@@ -103,7 +103,8 @@ instead of `tree.txt`'s. To run them locally, with Node.js and Podman:
 ```sh
 podman build --target browse -t seestar-copy-samba-browse internal/remote/testdata/samba
 podman run -d --rm --name seestar-copy-samba-browse -p 127.0.0.1:14450:14450 seestar-copy-samba-browse
-go build -mod=vendor ./cmd/seestar-copy-cli ./cmd/seestar-copy
+go build -mod=vendor ./cmd/seestar-copy-cli
+go build -mod=vendor ./cmd/seestar-copy
 ./seestar-copy-cli browse --endpoint 127.0.0.1:14450
 ```
 
