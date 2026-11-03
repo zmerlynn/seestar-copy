@@ -2,20 +2,19 @@ package app
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 )
 
 // fakeNative records the dialogs shown and answers them as set.
 type fakeNative struct {
-	mu      sync.Mutex
 	folders []string // the start folder of each picker shown
 	saves   []string // the name of each save dialog shown
 	alerts  []string
@@ -26,20 +25,14 @@ type fakeNative struct {
 func (f *fakeNative) native() *Native {
 	return &Native{
 		ChooseFolder: func(dir string) (string, error) {
-			f.mu.Lock()
-			defer f.mu.Unlock()
 			f.folders = append(f.folders, dir)
 			return f.answer, f.err
 		},
 		SaveFile: func(name string) (string, error) {
-			f.mu.Lock()
-			defer f.mu.Unlock()
 			f.saves = append(f.saves, name)
 			return f.answer, f.err
 		},
 		Alert: func(message string) {
-			f.mu.Lock()
-			defer f.mu.Unlock()
 			f.alerts = append(f.alerts, message)
 		},
 	}
@@ -99,6 +92,20 @@ func TestChooseFolder(t *testing.T) {
 	}
 	if len(f.folders) != 2 {
 		t.Errorf("%d pickers shown since the last start folder, want 2: Cancel's and none for the refused", len(f.folders))
+	}
+}
+
+// TestChooseFolderFails checks that a picker that can't open says so, and
+// how to go on.
+func TestChooseFolderFails(t *testing.T) {
+	e, f := newNativeEnv(t)
+	f.err = errors.New("no display")
+	w := e.post("/app/api/folder", `{"folder":""}`)
+	got := decode[struct {
+		Error string `json:"error"`
+	}](t, w)
+	if want := "Couldn't open the folder picker: no display. Type the folder's full path instead."; w.Code != 500 || got.Error != want {
+		t.Errorf("got %d %q, want 500 %q", w.Code, got.Error, want)
 	}
 }
 
