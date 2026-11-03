@@ -50,6 +50,9 @@ task_universal="$task_temp/universal/seestar-copy.app"
 task_contents="$task_universal/Contents"
 mkdir -p "$task_contents/MacOS" "$task_contents/Resources"
 iconutil -c icns "$task_iconset" -o "$task_contents/Resources/seestar-copy.icns"
+# The notices travel with an app dragged out of the DMG.
+cp LICENSE NOTICE "$task_contents/Resources/"
+chmod 0644 "$task_contents/Resources/LICENSE" "$task_contents/Resources/NOTICE"
 cat > "$task_contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

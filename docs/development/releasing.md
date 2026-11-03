@@ -89,7 +89,8 @@ On a Mac with Go 1.27.3, run `./scripts/release.sh v0.1.0`, then
 `./scripts/build-gui-mac.sh "$PWD/dist/parts" v0.1.0 /absolute/output`. The
 script builds `seestar-copy.app` for arm64 and amd64 with cgo, checks the
 deployment target 13.0 and the bundle's Info.plist, makes its icns from
-`cmd/seestar-copy/icon.png`, and combines the two slices with `lipo`. It
+`cmd/seestar-copy/icon.png`, copies LICENSE and NOTICE into the bundle's
+`Contents/Resources/`, and combines the two slices with `lipo`. It
 combines the two Darwin CLIs from the parts the same way, then runs
 `scripts/package-gui-mac.sh`, which signs the app and the CLI and writes
 `/absolute/output/seestar-copy_v0.1.0_darwin_universal.dmg`. In CI, the Mac

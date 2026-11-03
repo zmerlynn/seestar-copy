@@ -112,7 +112,8 @@ When the release workflow finishes, check:
 - [ ] each archive holds exactly `seestar-copy` and `seestar-copy-cli`
   (`.exe` on Windows), LICENSE and NOTICE at its root, and the DMG holds
   `seestar-copy.app`, the `Applications` link, the universal
-  `seestar-copy-cli`, LICENSE and NOTICE;
+  `seestar-copy-cli`, LICENSE and NOTICE, with LICENSE and NOTICE also in
+  `seestar-copy.app/Contents/Resources/`;
 - [ ] `gh attestation verify <downloaded-asset> --repo zmerlynn/seestar-copy`
   passes for each of the four archives and the DMG.
 
