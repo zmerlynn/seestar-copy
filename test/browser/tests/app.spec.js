@@ -69,15 +69,16 @@ test("the first-run line's Save and continue saves as Save does", async ({ page,
   const app = await startApp();
   await openApp(page, app.url);
   const go = page.locator('#s-first').getByRole('button', { name: 'Save and continue' });
-  // Save, at the end of the form, is out of view.
-  await expect(page.getByRole('button', { name: 'Save', exact: true })).not.toBeInViewport();
+  await expect(go).toBeInViewport();
   // Off until the address and the folder are both filled in.
   await expect(go).toBeDisabled();
   await field(page, 'Telescope address').fill(share);
   await expect(go).toBeEnabled();
   await field(page, 'Folder for your images').fill('');
   await expect(go).toBeDisabled();
-  await field(page, 'Folder for your images').fill(app.folder);
+  // A folder from the desktop picker counts too.
+  await page.route('**/app/api/folder', (route) => route.fulfill({ json: { folder: app.folder } }));
+  await page.locator('#f-choose').dispatchEvent('click');
   await expect(go).toBeEnabled();
 
   // A failed save is off while it runs, and its message takes focus.
@@ -301,7 +302,8 @@ test('a new address replaces Browse, and its errors say to select Share', async 
   await expect(page.locator('#f-test')).toHaveText(connected);
   await expect(page.locator('#hdot')).toHaveText('Reachable');
   await field(page, 'Telescope address').fill(refused);
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  // Enter in a field saves, as Save does.
+  await field(page, 'Telescope address').press('Enter');
   await expect(page.locator('#f-saved')).toHaveText('Settings saved.');
   await expect(page.locator('#haddr')).toHaveText(refused);
   // Test ran on Save, for the saved address.
