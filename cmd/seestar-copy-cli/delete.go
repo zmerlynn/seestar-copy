@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/zmerlynn/seestar-copy/internal/engine"
 	"github.com/zmerlynn/seestar-copy/internal/plan"
 	"github.com/zmerlynn/seestar-copy/internal/readonly"
 	"github.com/zmerlynn/seestar-copy/internal/remote"
@@ -31,7 +32,7 @@ type deleteOptions struct {
 	olderThan   time.Duration
 	selection   selectionFlags
 	// selector is set by validate from selection.
-	selector selector
+	selector engine.Selector
 	// dryRun is set by --dry-run, and by validate when --force is not
 	// given: either way the run only previews.
 	dryRun bool
@@ -234,7 +235,7 @@ type deleter struct {
 // files or folders failed locally; an error ends the run.
 func (d *deleter) run(ctx context.Context) (failed int, err error) {
 	start := time.Now()
-	var left leftOut
+	var left engine.LeftOut
 	defer func() {
 		names := []string{"deleted", "bytes", "folders"}
 		msg := "deletion"
@@ -243,7 +244,7 @@ func (d *deleter) run(ctx context.Context) (failed int, err error) {
 			msg = "dry run"
 		}
 		args := []any{names[0], d.deleted, names[1], d.bytes, names[2], d.folders, "kept", d.kept, "recent", d.recent,
-			"failed", d.failed, "skipped", len(left.skipped), "unmatched", left.unmatched, "elapsed", time.Since(start).Round(time.Millisecond)}
+			"failed", d.failed, "skipped", len(left.Skipped), "unmatched", left.Unmatched, "elapsed", time.Since(start).Round(time.Millisecond)}
 		switch {
 		case ctx.Err() != nil:
 			d.log.Info(msg+" stopped", args...)
@@ -264,13 +265,13 @@ func (d *deleter) run(ctx context.Context) (failed int, err error) {
 		return 0, fmt.Errorf("connect to %s: %w", d.opts.endpoint, err)
 	}
 	defer sess.Close()
-	entries, left, err := d.opts.selector.walk(ctx, sess)
+	entries, left, err := d.opts.selector.Walk(ctx, sess)
 	skip := "skipped"
 	if d.opts.dryRun {
 		skip = "would skip"
 	}
-	for _, x := range left.skipped {
-		d.log.Info(skip, "path", x.path, "exclude", x.by.flag)
+	for _, x := range left.Skipped {
+		d.log.Info(skip, "path", x.Path, "exclude", x.Exclude)
 	}
 	if err != nil {
 		return 0, fmt.Errorf("list the share: %w", err)
@@ -286,7 +287,7 @@ func (d *deleter) run(ctx context.Context) (failed int, err error) {
 		in.Listing = append(in.Listing, plan.Entry{Path: e.Path, Size: e.Size, ModTime: e.ModTime, Regular: e.Kind == remote.Regular})
 	}
 	decisions := plan.DecideDelete(in)
-	folders := plan.NewFolders(in.Listing, left.keptParents)
+	folders := plan.NewFolders(in.Listing, left.KeptParents)
 	for i := len(entries) - 1; i >= 0; i-- {
 		if ctx.Err() != nil {
 			return d.failed, nil

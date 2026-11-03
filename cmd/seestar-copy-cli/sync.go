@@ -15,6 +15,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/zmerlynn/seestar-copy/internal/copier"
+	"github.com/zmerlynn/seestar-copy/internal/engine"
 	"github.com/zmerlynn/seestar-copy/internal/plan"
 	"github.com/zmerlynn/seestar-copy/internal/readonly"
 	"github.com/zmerlynn/seestar-copy/internal/remote"
@@ -29,7 +30,7 @@ type syncOptions struct {
 	dest      string
 	selection selectionFlags
 	// selector is set by validate from selection.
-	selector     selector
+	selector     engine.Selector
 	interval     time.Duration
 	intervalSet  bool
 	once         bool
@@ -146,7 +147,7 @@ func validateEndpoint(endpoint string) error {
 // they equal, one per line, quoted for a shell.
 func defaultExcludeFlags() string {
 	var b strings.Builder
-	for _, p := range defaultExcludes {
+	for _, p := range engine.DefaultExcludes {
 		b.WriteString("  --exclude '" + p + "'\n")
 	}
 	return strings.TrimSuffix(b.String(), "\n")
@@ -295,9 +296,9 @@ func (s *syncer) pass(ctx context.Context) (failed int, err error) {
 	defer sess.Close()
 	// A failed listing still logs and counts what it skipped before failing.
 	decisions, counts, sel, err := s.decide(ctx, sess)
-	skipped, unmatched = len(sel.skipped), sel.unmatched
-	for _, x := range sel.skipped {
-		s.log.Info("skipped", "path", x.path, "exclude", x.by.flag)
+	skipped, unmatched = len(sel.Skipped), sel.Unmatched
+	for _, x := range sel.Skipped {
+		s.log.Info("skipped", "path", x.Path, "exclude", x.Exclude)
 	}
 	if err != nil {
 		return 0, err
@@ -346,7 +347,7 @@ func (s *syncer) dryPass(ctx context.Context) (failed int, err error) {
 	var bytes int64
 	defer func() {
 		args := []any{"copy", counts.Copy, "replace", counts.Replace, "adopt", counts.Adopt, "waiting", counts.Wait,
-			"failed", counts.Fail, "skipped", len(sel.skipped), "unmatched", sel.unmatched, "bytes", bytes, "elapsed", time.Since(start).Round(time.Millisecond)}
+			"failed", counts.Fail, "skipped", len(sel.Skipped), "unmatched", sel.Unmatched, "bytes", bytes, "elapsed", time.Since(start).Round(time.Millisecond)}
 		switch {
 		case ctx.Err() != nil:
 			s.log.Info("dry run stopped", args...)
@@ -363,8 +364,8 @@ func (s *syncer) dryPass(ctx context.Context) (failed int, err error) {
 	defer sess.Close()
 	var decisions []plan.Decision
 	decisions, counts, sel, err = s.decide(ctx, sess)
-	for _, x := range sel.skipped {
-		s.log.Info("would skip", "path", x.path, "exclude", x.by.flag)
+	for _, x := range sel.Skipped {
+		s.log.Info("would skip", "path", x.Path, "exclude", x.Exclude)
 	}
 	if err != nil {
 		return 0, err
@@ -439,7 +440,7 @@ func (s *syncer) decide(ctx context.Context, sess remote.Session) ([]plan.Decisi
 
 // selection is what one listing left out, and its top-level folders.
 type selection struct {
-	leftOut
+	engine.LeftOut
 	// folders are the listed top-level folders.
 	folders []string
 }
@@ -448,8 +449,8 @@ type selection struct {
 // listing failure, of the root or of a folder that is kept, fails the pass;
 // the returned selection then holds what was left out before it.
 func (s *syncer) list(ctx context.Context, sess remote.Session) ([]plan.Entry, selection, error) {
-	entries, out, err := s.opts.selector.walk(ctx, sess)
-	sel := selection{leftOut: out}
+	entries, out, err := s.opts.selector.Walk(ctx, sess)
+	sel := selection{LeftOut: out}
 	if err != nil {
 		return nil, sel, fmt.Errorf("list the share: %w", err)
 	}
