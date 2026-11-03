@@ -264,6 +264,7 @@ function renderPreview(v, st) {
   text('#c-ptitle', p && p.title);
   text('#c-ptext', p && p.text);
   text('#c-psub', p && p.sub);
+  text('#c-ppath', p && p.path);
   $('#c-pbusy').hidden = ps !== 'running';
   const groups = (p && p.groups) || [];
   $('#c-ptable').hidden = !groups.length;
@@ -290,6 +291,8 @@ function renderCopy(v) {
   const st = v.state;
   text('#c-title', v.title);
   text('#c-text', v.text);
+  // The path changes each second; it is not announced.
+  text('#c-path', v.path);
   $('#c-box').className = ['listfail', 'inuse', 'cantwrite'].includes(st) ? 'notice err' : '';
   $('#c-busy').hidden = !BUSY[st];
   if (BUSY[st]) $('#c-busy').setAttribute('aria-label', BUSY[st]);
@@ -462,7 +465,7 @@ function renderFree(v) {
     $('#x-dbar').max = p.total;
     $('#x-dbar').value = p.done;
   }
-  text('#x-dfile', v.file);
+  text('#x-file', v.file);
   for (const [sel, states] of Object.entries(XSHOWS)) $(sel).hidden = !states.includes(st);
   if (v.stopping) $('#x-stop').hidden = true;
   // An open confirm belongs to the preview it words: it closes before

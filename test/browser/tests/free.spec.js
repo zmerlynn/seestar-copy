@@ -1,8 +1,8 @@
 // The app's Free up space tab against the Samba fixture's browse tree,
 // which is read-only: a preview, the confirm dialog and Cancel, and a
 // settings save and a history clear that clear the preview. The confirmed delete is tested
-// in the Samba job.
-const { test, expect, share, tab, field, openApp } = require('./app');
+// in the Samba job. What a check is looking at uses synthetic states.
+const { test, expect, share, tab, field, openApp, fakeStatus } = require('./app');
 
 const upToDate = /^Up to date\. Next check at \d\d:\d\d\.$/;
 const safe = /^7 files \(\d.*\) are copied and safe to delete\.$/;
@@ -153,4 +153,39 @@ test('a bad number of days is refused at its field', async ({ page, startApp }) 
   await expect(page.locator('#x-days-err')).toHaveText('Enter a whole number of days, 0 or more.');
   await expect(days(page)).toHaveAttribute('aria-invalid', 'true');
   await expect(days(page)).toBeFocused();
+});
+
+test('a check names the folder or file it is looking at, and announces only its stages', async ({ page, startApp }) => {
+  const app = await startApp((folder) => ({ version: 1, address: share, folder, start_copying: false }));
+  let f = null;
+  await fakeStatus(page, () => null, () => f);
+  await openApp(page, app.url);
+  await tab(page, 'Free up space').click();
+  const file = page.locator('#x-file');
+  const live = page.locator('#x-live');
+  await expect(file).toBeHidden();
+  // The line is outside the tab's one status region.
+  await expect(page.locator('#p-free [role=status]')).toHaveCount(1);
+
+  f = { state: 'checking', title: 'Checking files…', file: 'Listing MyWorks… (1 folder)' };
+  await expect(file).toHaveText('Listing MyWorks… (1 folder)');
+  await expect(page.locator('#x-busy')).toBeVisible();
+  await expect(live).toHaveText('Checking files…');
+  f = { state: 'checking', title: 'Checking files…', file: 'Listing MyWorks/M 31… (2 folders)' };
+  await expect(file).toHaveText('Listing MyWorks/M 31… (2 folders)');
+  f = {
+    state: 'checking', title: 'Checking 3 files…', progress: { done: 0, total: 9, text: 'Checking your copies: 0 B of 9 B' },
+    file: 'Checking MyWorks/M 31/a.fit…',
+  };
+  await expect(file).toHaveText('Checking MyWorks/M 31/a.fit…');
+  await expect(page.locator('#x-hash')).toBeVisible();
+  await expect(page.locator('#x-busy')).toBeHidden();
+  await expect(live).toHaveText('Checking files…');
+
+  f = { state: 'deleting', title: 'Deleting 1 of 2…', progress: { done: 0, total: 2 }, file: 'Checking MyWorks/M 31/a.fit…' };
+  await expect(live).toHaveText('Deleting 1 of 2…');
+  await expect(file).toHaveText('Checking MyWorks/M 31/a.fit…');
+  f = { state: 'deleting', title: 'Deleting 2 of 2…', progress: { done: 1, total: 2 }, file: 'Last deleted: MyWorks/M 31/a.fit' };
+  await expect(file).toHaveText('Last deleted: MyWorks/M 31/a.fit');
+  await expect(live).toHaveText('Deleting 1 of 2…');
 });
