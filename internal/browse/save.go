@@ -2,8 +2,6 @@ package browse
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -39,13 +37,11 @@ func Save(ctx context.Context, sessions *Sessions, p, dst string) (err error) {
 	if info.IsDir() {
 		return errors.New("it is a folder on the device")
 	}
-	raw := make([]byte, 8)
-	rand.Read(raw)
-	tmp := filepath.Join(filepath.Dir(dst), "."+filepath.Base(dst)+"."+hex.EncodeToString(raw)+".tmp")
-	out, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o666)
+	out, err := os.CreateTemp(filepath.Dir(dst), "."+filepath.Base(dst)+".*.tmp")
 	if err != nil {
 		return err
 	}
+	tmp := out.Name()
 	defer func() {
 		if err != nil {
 			out.Close() // an error here means it was closed already
