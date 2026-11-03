@@ -175,7 +175,7 @@ async function saveForm() {
   } else {
     result('#f-saved', 'Settings saved.', 'ok');
   }
-  if (data.browse_changed || first) $('#b-frame').src = '/';
+  if (data.browse_changed) $('#b-frame').src = '/';
   // The header shows a Test already passed for this address; otherwise
   // Test runs on Save, and a failure does not undo the save.
   if (saved.address === passed) {

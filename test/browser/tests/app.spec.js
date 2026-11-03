@@ -315,16 +315,12 @@ test('the app page refuses a request without its token', async ({ page, startApp
   await expect(page.locator('#loading')).toHaveText("Can't load seestar-copy. Close this window and reopen seestar-copy.");
 });
 
-// stubClipboard records what the page copies, in window.copied.
-async function stubClipboard(page) {
+test('Settings shows the history and settings files, with Copy buttons', async ({ page, startApp }) => {
+  // window.copied records what the page copies.
   await page.addInitScript(() => {
     window.copied = [];
     Object.defineProperty(navigator, 'clipboard', { value: { writeText: async (s) => window.copied.push(s) } });
   });
-}
-
-test('Settings shows the history and settings files, with Copy buttons', async ({ page, startApp }) => {
-  await stubClipboard(page);
   const app = await startApp(setUp('/nowhere'));
   await openApp(page, app.url);
   await tab(page, 'Settings').click();
