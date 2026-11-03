@@ -126,9 +126,9 @@ const (
 // failed some locally.
 var ErrFailedFiles = errors.New("failed files")
 
-// errNoDest is the error for a missing destination when the copies prove
+// ErrNoDest is the error for a missing destination when the copies prove
 // the files.
-var errNoDest = errors.New("destination not found; give --trust-state if the copies were moved or the drive is offline")
+var ErrNoDest = errors.New("destination not found; give --trust-state if the copies were moved or the drive is offline")
 
 // RunDelete loads the state, lists the share and deletes what is proven,
 // or in a dry run (a preview) reports what it would delete, and returns
@@ -144,7 +144,7 @@ func RunDelete(ctx context.Context, o DeleteOptions, log *slog.Logger) (DeleteRe
 			root, err := os.OpenRoot(o.Dest)
 			switch {
 			case errors.Is(err, fs.ErrNotExist):
-				return DeleteResult{}, errNoDest
+				return DeleteResult{}, ErrNoDest
 			case err != nil:
 				return DeleteResult{}, fmt.Errorf("open destination: %w", err)
 			}

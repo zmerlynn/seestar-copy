@@ -324,6 +324,8 @@ func (s *server) save(w http.ResponseWriter, in input) {
 		return
 	}
 	old, wasSetUp := s.file.settings, s.file.setUp()
+	// The Free up space options are saved by Find, not by this form.
+	set.OlderThanDays, set.TrustState = old.OlderThanDays, old.TrustState
 	if err := s.file.save(set); err != nil {
 		s.mu.Unlock()
 		s.log.Error("save settings", "path", s.file.path, "err", err)
