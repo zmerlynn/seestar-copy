@@ -111,7 +111,22 @@ func decode[T any](t *testing.T, w *httptest.ResponseRecorder) T {
 	return v
 }
 
-const goodInput = `{"address":"192.0.2.10","folder":"/data/Seestar","interval":"5","excludes":["Video","","/Preview"],"includes":[],"skip_built_in":true,"start_copying":false}`
+// abs makes a slash path absolute on this OS: on Windows, "/x" is not.
+func abs(p string) string {
+	a, err := filepath.Abs(filepath.FromSlash(p))
+	if err != nil {
+		panic(err)
+	}
+	return a
+}
+
+// quote is s as a JSON string.
+func quote(s string) string {
+	b, _ := json.Marshal(s)
+	return string(b)
+}
+
+var goodInput = `{"address":"192.0.2.10","folder":` + quote(abs("/data/Seestar")) + `,"interval":"5","excludes":["Video","","/Preview"],"includes":[],"skip_built_in":true,"start_copying":false}`
 
 func TestAPIChecks(t *testing.T) {
 	e := newAppEnv(t, "")
@@ -221,7 +236,7 @@ func TestRefusedPostChangesNothing(t *testing.T) {
 
 func TestBodyLimit(t *testing.T) {
 	e := newAppEnv(t, "")
-	big := `{"address":"192.0.2.10","folder":"/x","interval":"5","excludes":["` + strings.Repeat("a", maxJSON) + `"]}`
+	big := `{"address":"192.0.2.10","folder":` + quote(abs("/x")) + `,"interval":"5","excludes":["` + strings.Repeat("a", maxJSON) + `"]}`
 	if w := e.post("/app/api/settings", big); w.Code != http.StatusRequestEntityTooLarge {
 		t.Errorf("a body over the limit = %d", w.Code)
 	}
@@ -298,16 +313,16 @@ func TestSaveFieldErrors(t *testing.T) {
 		want  map[string]string
 	}{
 		{"empty", `{}`, map[string]string{"address": addressError, "folder": folderError, "interval": intervalError}},
-		{"bad patterns", `{"address":"192.0.2.10","folder":"/x","interval":"5","excludes":["Video","","[Pp]review"],"includes":["  ","a/"]}`, map[string]string{
+		{"bad patterns", `{"address":"192.0.2.10","folder":` + quote(abs("/x")) + `,"interval":"5","excludes":["Video","","[Pp]review"],"includes":["  ","a/"]}`, map[string]string{
 			"excludes": `Line 3: [ and \ are not supported; use * and ?, and / between folders. Correct this pattern and save again.`,
 			"includes": "Line 2: omit the trailing /; a pattern matches files and folders. Correct this pattern and save again.",
 		}},
-		{"interval 0", `{"address":"192.0.2.10","folder":"/x","interval":"0"}`, map[string]string{"interval": intervalError}},
-		{"interval 1441", `{"address":"192.0.2.10","folder":"/x","interval":"1441"}`, map[string]string{"interval": intervalError}},
-		{"interval 1.5", `{"address":"192.0.2.10","folder":"/x","interval":"1.5"}`, map[string]string{"interval": intervalError}},
+		{"interval 0", `{"address":"192.0.2.10","folder":` + quote(abs("/x")) + `,"interval":"0"}`, map[string]string{"interval": intervalError}},
+		{"interval 1441", `{"address":"192.0.2.10","folder":` + quote(abs("/x")) + `,"interval":"1441"}`, map[string]string{"interval": intervalError}},
+		{"interval 1.5", `{"address":"192.0.2.10","folder":` + quote(abs("/x")) + `,"interval":"1.5"}`, map[string]string{"interval": intervalError}},
 		{"relative folder", `{"address":"192.0.2.10","folder":"Seestar","interval":"5"}`, map[string]string{"folder": folderError}},
 		{"tilde folder", `{"address":"192.0.2.10","folder":"~/Seestar","interval":"5"}`, map[string]string{"folder": folderError}},
-		{"port 0", `{"address":"192.0.2.10:0","folder":"/x","interval":"5"}`, map[string]string{"address": addressError}},
+		{"port 0", `{"address":"192.0.2.10:0","folder":` + quote(abs("/x")) + `,"interval":"5"}`, map[string]string{"address": addressError}},
 	}
 	for _, tt := range tests {
 		e := newAppEnv(t, "")
@@ -366,7 +381,7 @@ func TestSaveWritesAndKeepsUnknown(t *testing.T) {
 		Settings      Settings `json:"settings"`
 		BrowseChanged bool     `json:"browse_changed"`
 	}](t, w)
-	want := Settings{Version: 1, Address: "192.0.2.10:445", Folder: "/data/Seestar", IntervalMinutes: 5,
+	want := Settings{Version: 1, Address: "192.0.2.10:445", Folder: abs("/data/Seestar"), IntervalMinutes: 5,
 		Excludes: []string{"Video", "/Preview"}, Includes: []string{}, SkipBuiltIn: true, StartCopying: false}
 	if fmt.Sprint(got.Settings) != fmt.Sprint(want) || !got.BrowseChanged {
 		t.Errorf("got %+v, want %+v and a browse change", got, want)
@@ -539,7 +554,7 @@ func TestBrowseSwap(t *testing.T) {
 		t.Error("the old pool's session is still open")
 	}
 	// A new folder also replaces it.
-	refolder := strings.Replace(moved, `"/data/Seestar"`, `"/data/Other"`, 1)
+	refolder := strings.Replace(moved, quote(abs("/data/Seestar")), quote(abs("/data/Other")), 1)
 	if got := decode[struct {
 		BrowseChanged bool `json:"browse_changed"`
 	}](t, e.post("/app/api/settings", refolder)); !got.BrowseChanged {
