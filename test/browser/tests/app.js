@@ -46,14 +46,19 @@ async function launch(dir, settings, home = dir) {
 // log attached. startApp(settings, home) shares another app's home, and so
 // its state folder.
 const test = base.test.extend({
-  // eslint-disable-next-line no-empty-pattern
-  startApp: async ({}, use, testInfo) => {
+  startApp: async ({ context }, use, testInfo) => {
     const apps = [];
     await use(async (settings, home) => {
       const app = await launch(testInfo.outputPath('app-' + apps.length), settings, home);
       apps.push(app);
       return app;
     });
+    // The pages stop polling, and a route still fetching is dropped, before
+    // the apps they talk to stop.
+    for (const p of context.pages()) {
+      await p.unrouteAll({ behavior: 'ignoreErrors' });
+      await p.close();
+    }
     for (const app of apps) {
       app.child.kill('SIGINT');
       await app.exited;
