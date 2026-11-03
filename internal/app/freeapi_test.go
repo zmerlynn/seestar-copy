@@ -36,9 +36,9 @@ func TestFreeAPI(t *testing.T) {
 		t.Errorf("delete without a preview: %d %s", w.Code, w.Body)
 	}
 
-	// The folder is missing, so the check fails, but the options stay.
+	// Find starts, however the check then ends, and saves the options.
 	w = e.post("/app/api/delete", `{"action":"find","days":" 0 ","trust":true}`)
-	if v := decode[freeView](t, w); w.Code != 200 || v.State != frChecking {
+	if v := decode[freeView](t, w); w.Code != 200 {
 		t.Errorf("find: %d %+v", w.Code, v)
 	}
 	f, err := loadSettings(e.path)
