@@ -45,13 +45,12 @@ for task_size in 16 32 128 256; do
   sips -z "$task_double" "$task_double" cmd/seestar-copy/icon.png --out "$task_iconset/icon_${task_size}x${task_size}@2x.png" >/dev/null
  fi
 done
-for task_arch in arm64 amd64; do
- task_app="$task_temp/$task_arch/seestar-copy.app/Contents"
- mkdir -p "$task_app/MacOS" "$task_app/Resources"
- iconutil -c icns "$task_iconset" -o "$task_app/Resources/seestar-copy.icns"
- GOARCH="$task_arch" go build -mod=vendor -p 2 -tags gui,production -trimpath -buildvcs=false \
-  -ldflags="-s -w -X main.version=$task_version" -o "$task_app/MacOS/seestar-copy" ./cmd/seestar-copy
- cat > "$task_app/Info.plist" <<PLIST
+# Both slices share one bundle's metadata and resources. Sign only after lipo.
+task_universal="$task_temp/universal/seestar-copy.app"
+task_contents="$task_universal/Contents"
+mkdir -p "$task_contents/MacOS" "$task_contents/Resources"
+iconutil -c icns "$task_iconset" -o "$task_contents/Resources/seestar-copy.icns"
+cat > "$task_contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -67,25 +66,22 @@ for task_arch in arm64 amd64; do
 <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
 </dict></plist>
 PLIST
- task_build=$(xcrun vtool -show-build "$task_app/MacOS/seestar-copy")
+plutil -lint "$task_contents/Info.plist"
+for task_arch in arm64 amd64; do
+ task_slice="$task_temp/seestar-copy-$task_arch"
+ GOARCH="$task_arch" go build -mod=vendor -p 2 -tags gui,production -trimpath -buildvcs=false \
+  -ldflags="-s -w -X main.version=$task_version" -o "$task_slice" ./cmd/seestar-copy
+ task_build=$(xcrun vtool -show-build "$task_slice")
  echo "$task_build"
  awk '$1 == "minos" { found=1; if ($2 != "13.0") exit 1 } END { if (!found) exit 1 }' <<< "$task_build"
- plutil -lint "$task_app/Info.plist"
- shasum -a 256 "$task_app/MacOS/seestar-copy"
+ shasum -a 256 "$task_slice"
 done
-
-# Both slices share the same bundle metadata and resources. Sign only after lipo.
-task_universal="$task_temp/universal/seestar-copy.app"
-mkdir -p "$(dirname "$task_universal")"
-ditto "$task_temp/arm64/seestar-copy.app" "$task_universal"
-lipo -create "$task_temp/arm64/seestar-copy.app/Contents/MacOS/seestar-copy" \
- "$task_temp/amd64/seestar-copy.app/Contents/MacOS/seestar-copy" \
- -output "$task_universal/Contents/MacOS/seestar-copy"
-lipo "$task_universal/Contents/MacOS/seestar-copy" -verify_arch arm64 x86_64
+lipo -create "$task_temp/seestar-copy-arm64" "$task_temp/seestar-copy-amd64" \
+ -output "$task_contents/MacOS/seestar-copy"
+lipo "$task_contents/MacOS/seestar-copy" -verify_arch arm64 x86_64
 # The CLI is release.sh's reproducible Darwin parts, combined.
 lipo -create "$task_parts/seestar-copy-cli_${task_version}_darwin_arm64" \
  "$task_parts/seestar-copy-cli_${task_version}_darwin_amd64" \
  -output "$task_temp/universal/seestar-copy-cli"
 lipo "$task_temp/universal/seestar-copy-cli" -verify_arch arm64 x86_64
-mkdir -p "$3"
 scripts/package-gui-mac.sh "$task_universal" "$3/seestar-copy_${task_version}_darwin_universal.dmg"
