@@ -10,6 +10,8 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/hirochachacha/go-smb2/v2/x/protocol"
+
 	"github.com/zmerlynn/seestar-copy/internal/engine"
 	"github.com/zmerlynn/seestar-copy/internal/remote"
 )
@@ -19,6 +21,10 @@ const (
 	folderError   = "Enter the full path of a folder."
 	intervalError = "Enter a whole number of minutes from 1 to 1440."
 )
+
+// statusBadNetworkName is the NTSTATUS a server answers when it has no
+// share by the name asked for.
+const statusBadNetworkName = 0xC00000CC
 
 // normalizeAddress checks an address as typed: host or host:port, where a
 // bare host gets port 445 and an IPv6 host may be bare or in brackets. It
@@ -120,7 +126,16 @@ func testMessage(endpoint string, entries []remote.Entry, err error) string {
 		return "Can't find " + host + ". Try the telescope's IP address."
 	case errors.Is(err, syscall.ECONNREFUSED):
 		return host + " answered but refused port " + port + ". Is this the telescope's address?"
+	case isNoShare(err):
+		return `Connected, but this isn't a Seestar: it has no "EMMC Images" share.`
 	default:
 		return "Can't reach " + endpoint + ". Check that the telescope is on and on the same network as this computer, or that seestar-wormhole is running."
 	}
+}
+
+// isNoShare reports whether err is a server's answer that it has no such
+// share.
+func isNoShare(err error) bool {
+	rerr, ok := errors.AsType[*protocol.ResponseError](err)
+	return ok && rerr.Code == statusBadNetworkName
 }

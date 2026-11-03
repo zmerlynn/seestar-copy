@@ -21,6 +21,8 @@ import (
 	"testing/fstest"
 	"time"
 
+	"github.com/hirochachacha/go-smb2/v2/x/protocol"
+
 	"github.com/zmerlynn/seestar-copy/internal/remote"
 )
 
@@ -420,6 +422,9 @@ func TestSaveFailure(t *testing.T) {
 	}
 }
 
+// smbStatus is a server's answer with an NTSTATUS, as go-smb2 returns it.
+func smbStatus(code uint32) error { return &protocol.ResponseError{Code: code} }
+
 func TestTestMessages(t *testing.T) {
 	dirs := func(names ...string) []remote.Entry {
 		var out []remote.Entry
@@ -442,6 +447,12 @@ func TestTestMessages(t *testing.T) {
 		{nil, fmt.Errorf("connect to x: dial: %w", &net.OpError{Op: "dial", Err: os.NewSyscallError("connect", syscall.ECONNREFUSED)}), "seestar.local answered but refused port 4445. Is this the telescope's address?"},
 		{nil, fmt.Errorf("connect to x: %w", context.DeadlineExceeded), "Can't reach seestar.local:4445. Check that the telescope is on and on the same network as this computer, or that seestar-wormhole is running."},
 		{nil, &net.DNSError{Err: "server misbehaving", Name: "seestar.local", IsTemporary: true}, "Can't reach seestar.local:4445. Check that the telescope is on and on the same network as this computer, or that seestar-wormhole is running."},
+		// Mount's error, as remote and engine wrap it.
+		{nil, fmt.Errorf("connect to x: mount \"EMMC Images\" on x: %w", &fs.PathError{Op: "mount", Path: `\\x\EMMC Images`, Err: smbStatus(0xC00000CC)}),
+			`Connected, but this isn't a Seestar: it has no "EMMC Images" share.`},
+		// Wrong credentials, or a share it may not use: not this case.
+		{nil, fmt.Errorf("connect to x: dial x: %w", smbStatus(0xC000006D)), "Can't reach seestar.local:4445. Check that the telescope is on and on the same network as this computer, or that seestar-wormhole is running."},
+		{nil, fmt.Errorf("connect to x: mount \"EMMC Images\" on x: %w", &fs.PathError{Op: "mount", Path: `\\x\EMMC Images`, Err: smbStatus(0xC0000022)}), "Can't reach seestar.local:4445. Check that the telescope is on and on the same network as this computer, or that seestar-wormhole is running."},
 	}
 	for _, tt := range tests {
 		if got := testMessage("seestar.local:4445", tt.entries, tt.err); got != tt.want {
