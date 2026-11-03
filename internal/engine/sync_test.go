@@ -184,12 +184,12 @@ func TestCheckNow(t *testing.T) {
 		go func() { done <- RunSync(ctx, o, discard) }()
 		synctest.Wait() // the first pass is done, and the wait begun
 		if got := passes.Load(); got != 1 {
-			t.Fatalf("passes before Check now: got %d, want 1", got)
+			t.Errorf("passes before Check now: got %d, want 1", got)
 		}
 		select {
 		case check <- struct{}{}:
 		default:
-			t.Fatal("the wait did not take Check now")
+			t.Error("the wait did not take Check now")
 		}
 		synctest.Wait()
 		if got := passes.Load(); got != 2 {
