@@ -188,9 +188,12 @@ test('the status region, bars and focus follow the stage, not each tick', async 
   v = { state: 'listing', title: 'Looking for new files…' };
   await expect(live).toHaveText('Looking for new files…');
   await expect(busy).toHaveAttribute('aria-label', 'Looking for new files');
-  // A folder count is a new title within the stage: announced, as it is not a byte tick.
+  // Folder counts within listing change the heading, not the status region.
   v = { state: 'listing', title: 'Looking for new files… 3 folders checked.' };
   await expect(title(page)).toHaveText('Looking for new files… 3 folders checked.');
+  v = { state: 'listing', title: 'Looking for new files… 4 folders checked.' };
+  await expect(title(page)).toHaveText('Looking for new files… 4 folders checked.');
+  await expect(live).toHaveText('Looking for new files…');
 
   // Copying has a determinate bar with value and max, and per-file lines
   // outside the status region.

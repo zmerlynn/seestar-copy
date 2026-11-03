@@ -215,7 +215,7 @@ const SHOWS = {
 const BUSY = { connecting: 'Connecting', listing: 'Looking for new files' };
 
 let polling = 0;
-let shown = { state: '', title: '', contact: '', files: '', seq: -1 };
+let shown = { state: '', contact: '', files: '', seq: -1 };
 let pressed = null; // a button the user pressed, until the state after it is shown
 
 function text(sel, s) {
@@ -268,9 +268,8 @@ function renderCopy(v) {
   }
   for (const [sel, states] of Object.entries(SHOWS)) $(sel).hidden = !states.includes(st);
   // A stage change is announced; ticks within a stage are not.
-  if (st !== shown.state || (st !== 'copying' && v.title !== shown.title)) $('#c-live').textContent = v.title;
+  if (st !== shown.state) $('#c-live').textContent = v.title;
   shown.state = st;
-  shown.title = v.title;
   const chip = $('#hchip');
   chip.className = 'chip ' + (st === 'failures' ? 'warn' : v.on ? 'on' : 'off');
   chip.textContent = v.chip;
