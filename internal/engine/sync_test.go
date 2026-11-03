@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/zmerlynn/seestar-copy/internal/copier"
 	"github.com/zmerlynn/seestar-copy/internal/remote"
+	"github.com/zmerlynn/seestar-copy/internal/state"
 )
 
 // oldMTime is the device mtime of the test files: old enough to copy.
@@ -208,4 +210,52 @@ func TestCheckNow(t *testing.T) {
 			t.Errorf("got err %v after a stop, want nil", err)
 		}
 	})
+}
+
+// With Recreate, a destination removed between passes is created again,
+// and a later pass copies a new file there, while the state stays open
+// and locked. Without it, as in the CLI, the new file fails.
+func TestRecreate(t *testing.T) {
+	for _, recreate := range []bool{true, false} {
+		t.Run(fmt.Sprint("recreate=", recreate), func(t *testing.T) {
+			check := make(chan struct{})
+			files := fstest.MapFS{"MyWorks/a.jpg": file("abc")}
+			o := syncOptions(t, files, nil)
+			o.Once, o.CheckNow, o.Recreate = false, check, recreate
+			sums := make(chan Summary)
+			o.Hooks.PassDone = func(s Summary) { sums <- s }
+			ctx, cancel := context.WithCancel(t.Context())
+			done := make(chan error)
+			go func() { done <- RunSync(ctx, o, discard) }()
+			if s := <-sums; s.Copied != 1 {
+				t.Fatalf("first pass: got %+v, want 1 copied", s)
+			}
+			if err := os.RemoveAll(o.Dest); err != nil {
+				t.Fatal(err)
+			}
+			// A new file waits one pass to be seen unchanged.
+			files["MyWorks/b.jpg"] = file("b")
+			check <- struct{}{}
+			if s := <-sums; s.Waiting != 1 {
+				t.Fatalf("second pass: got %+v, want b.jpg waiting", s)
+			}
+			check <- struct{}{}
+			s := <-sums
+			if _, err := state.Open(o.StateDir, o.Dest, discard); !errors.Is(err, state.ErrLocked) {
+				t.Errorf("a second open during the loop: got %v, want ErrLocked", err)
+			}
+			_, statErr := os.Stat(filepath.Join(o.Dest, "MyWorks", "b.jpg"))
+			if recreate {
+				if s.Copied != 1 || len(s.Failed) != 0 || statErr != nil {
+					t.Errorf("third pass: got %+v and stat %v, want b.jpg copied", s, statErr)
+				}
+			} else if len(s.Failed) != 1 || statErr == nil {
+				t.Errorf("third pass: got %+v and stat %v, want b.jpg failed and absent", s, statErr)
+			}
+			cancel()
+			if err := <-done; err != nil {
+				t.Errorf("got err %v after a stop, want nil", err)
+			}
+		})
+	}
 }
