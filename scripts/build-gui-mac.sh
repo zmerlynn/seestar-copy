@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# Build the universal seestar-copy.app, combine the two Darwin CLI parts from
+# release.sh, and package, sign and notarize the DMG with package-gui-mac.sh.
+# Run on a Mac with Xcode Command Line Tools and Go 1.27.3, with
+# scripts/dmg-requirements.txt installed in an active Python venv. Usable
+# locally and in release.yml.
+set -euo pipefail
+export GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local GOMAXPROCS=2
+[[ $(uname -s) == Darwin ]] || { echo 'Run on macOS with Xcode Command Line Tools' >&2; exit 1; }
+[[ $# == 3 && $1 == /* && $3 == /* ]] || {
+ echo 'Usage: scripts/build-gui-mac.sh /absolute/parts-directory version /absolute/output-directory' >&2
+ exit 2
+}
+[[ $(go env GOVERSION) == go1.27.3 ]] || { echo 'Go 1.27.3 required' >&2; exit 1; }
+xcode-select -p >/dev/null
+task_parts=$1
+task_version=$2
+"$(dirname "$0")/release.sh" --validate-only "$task_version"
+task_bundle_version=${task_version#v}
+task_bundle_version=${task_bundle_version%-rc.*}
+for task_arch in arm64 amd64; do
+ [[ -f "$task_parts/seestar-copy-cli_${task_version}_darwin_${task_arch}" ]] || {
+  echo "Darwin $task_arch CLI part is missing from $task_parts" >&2
+  exit 1
+ }
+done
+cd "$(dirname "$0")/.."
+task_temp=$(mktemp -d "${TMPDIR:-/tmp}/seestar-copy-build.XXXXXX")
+trap 'rm -rf "$task_temp"' EXIT
+export GOFLAGS= GOAMD64=v1 GOARM64=v8.0
+export CGO_ENABLED=1 GOOS=darwin
+export CC="$PWD/scripts/gui-mac-clang.sh"
+export CGO_CFLAGS="-mmacosx-version-min=13.0" CGO_LDFLAGS="-mmacosx-version-min=13.0"
+export MACOSX_DEPLOYMENT_TARGET=13.0
+xcrun clang --version
+xcrun --show-sdk-version
+pkgutil --pkg-info=com.apple.pkg.CLTools_Executables
+# The icon is 256 px, so the icon set stops there.
+task_iconset="$task_temp/seestar-copy.iconset"
+mkdir -p "$task_iconset"
+for task_size in 16 32 128 256; do
+ sips -z "$task_size" "$task_size" cmd/seestar-copy/icon.png --out "$task_iconset/icon_${task_size}x${task_size}.png" >/dev/null
+ if [[ $task_size != 256 ]]; then
+  task_double=$((task_size * 2))
+  sips -z "$task_double" "$task_double" cmd/seestar-copy/icon.png --out "$task_iconset/icon_${task_size}x${task_size}@2x.png" >/dev/null
+ fi
+done
+for task_arch in arm64 amd64; do
+ task_app="$task_temp/$task_arch/seestar-copy.app/Contents"
+ mkdir -p "$task_app/MacOS" "$task_app/Resources"
+ iconutil -c icns "$task_iconset" -o "$task_app/Resources/seestar-copy.icns"
+ GOARCH="$task_arch" go build -mod=vendor -p 2 -tags gui,production -trimpath -buildvcs=false \
+  -ldflags="-s -w -X main.version=$task_version" -o "$task_app/MacOS/seestar-copy" ./cmd/seestar-copy
+ cat > "$task_app/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleExecutable</key><string>seestar-copy</string>
+<key>CFBundleIdentifier</key><string>net.zml.seestar-copy</string>
+<key>CFBundleIconFile</key><string>seestar-copy.icns</string>
+<key>CFBundleName</key><string>seestar-copy</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+<key>CFBundleVersion</key><string>${task_bundle_version}</string>
+<key>CFBundleShortVersionString</key><string>${task_bundle_version}</string>
+<key>LSMinimumSystemVersion</key><string>13.0</string>
+<key>NSHighResolutionCapable</key><true/>
+<key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
+</dict></plist>
+PLIST
+ task_build=$(xcrun vtool -show-build "$task_app/MacOS/seestar-copy")
+ echo "$task_build"
+ awk '$1 == "minos" { found=1; if ($2 != "13.0") exit 1 } END { if (!found) exit 1 }' <<< "$task_build"
+ plutil -lint "$task_app/Info.plist"
+ shasum -a 256 "$task_app/MacOS/seestar-copy"
+done
+
+# Both slices share the same bundle metadata and resources. Sign only after lipo.
+task_universal="$task_temp/universal/seestar-copy.app"
+mkdir -p "$(dirname "$task_universal")"
+ditto "$task_temp/arm64/seestar-copy.app" "$task_universal"
+lipo -create "$task_temp/arm64/seestar-copy.app/Contents/MacOS/seestar-copy" \
+ "$task_temp/amd64/seestar-copy.app/Contents/MacOS/seestar-copy" \
+ -output "$task_universal/Contents/MacOS/seestar-copy"
+lipo "$task_universal/Contents/MacOS/seestar-copy" -verify_arch arm64 x86_64
+# The CLI is release.sh's reproducible Darwin parts, combined.
+lipo -create "$task_parts/seestar-copy-cli_${task_version}_darwin_arm64" \
+ "$task_parts/seestar-copy-cli_${task_version}_darwin_amd64" \
+ -output "$task_temp/universal/seestar-copy-cli"
+lipo "$task_temp/universal/seestar-copy-cli" -verify_arch arm64 x86_64
+mkdir -p "$3"
+scripts/package-gui-mac.sh "$task_universal" "$3/seestar-copy_${task_version}_darwin_universal.dmg"
