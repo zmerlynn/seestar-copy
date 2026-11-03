@@ -70,7 +70,7 @@ const browseStatus = (page) => frame(page).locator('#status');
 const tab = (page, name) => page.getByRole('tab', { name, exact: true });
 const field = (page, label) => page.getByLabel(label, { exact: true });
 
-// openApp loads the page and waits for it to show Setup or the tabs.
+// openApp loads the page and waits for it to show the tabs.
 async function openApp(page, url) {
   await page.goto(url);
   await expect(page.locator('#loading')).toBeHidden();
