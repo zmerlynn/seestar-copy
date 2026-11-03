@@ -573,7 +573,7 @@ func TestCopyAPI(t *testing.T) {
 func TestRunStartsCopying(t *testing.T) {
 	dir := t.TempDir()
 	path, stateDir, dest := filepath.Join(dir, "app.json"), filepath.Join(dir, "state"), filepath.Join(dir, "Seestar")
-	writeFile(t, path, `{"version":1,"address":"192.0.2.10:445","folder":`+quote(dest)+`,"start_copying":true}`)
+	writeFile(t, path, `{"version":1,"address":"192.0.2.10:445","folder":`+quote(dest)+`}`)
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	dial := func(context.Context, string) (remote.Session, error) {
 		return remote.NewFake(fstest.MapFS{"MyWorks/a.jpg": image("abc")}), nil

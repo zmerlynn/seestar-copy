@@ -44,23 +44,29 @@ func TestLoadAbsentFieldsTakeDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := Settings{Version: 1, Address: "192.0.2.10:445", Folder: "/data/Seestar", IntervalMinutes: 5,
-		Excludes: []string{}, Includes: []string{}, SkipBuiltIn: false, StartCopying: false, OlderThanDays: 7}
+		Excludes: []string{}, Includes: []string{}, SkipBuiltIn: false, StartCopying: true, OlderThanDays: 7}
 	if !f.exists || !reflect.DeepEqual(f.settings, want) {
 		t.Errorf("got %+v, want %+v", f.settings, want)
 	}
 }
 
-// A file saved with copying at startup on keeps it on; only new files
-// default to off.
-func TestLoadKeepsStartCopying(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "app.json")
-	writeFile(t, path, `{"version":1,"address":"192.0.2.10:445","folder":"/data/Seestar","start_copying":true}`)
-	f, err := loadSettings(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !f.settings.StartCopying {
-		t.Errorf("start_copying true loaded as %v", f.settings.StartCopying)
+// Only a new settings file starts with copying at startup off. A file
+// without start_copying keeps the earlier default, on, and a saved value
+// is kept as it is.
+func TestLoadStartCopying(t *testing.T) {
+	for _, c := range []struct {
+		member string
+		want   bool
+	}{{"", true}, {`,"start_copying":true`, true}, {`,"start_copying":false`, false}} {
+		path := filepath.Join(t.TempDir(), "app.json")
+		writeFile(t, path, `{"version":1,"address":"192.0.2.10:445","folder":"/data/Seestar"`+c.member+`}`)
+		f, err := loadSettings(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if f.settings.StartCopying != c.want {
+			t.Errorf("file with %q: start_copying %v, want %v", c.member, f.settings.StartCopying, c.want)
+		}
 	}
 }
 
