@@ -150,8 +150,6 @@ async function save(ev) {
   }
 }
 
-// renderFirst turns on the first-run line's Save and continue, which saves
-// as Save does, once the address and folder are filled in.
 function renderFirst() {
   $('#s-save').disabled = $('#f-save').disabled || !$('#f-addr').value.trim() || !$('#f-folder').value.trim();
 }
@@ -683,7 +681,7 @@ $('#s-clip').addEventListener('click', (ev) =>
 $('#f-folder').addEventListener('input', renderHistory);
 $('#f-folder').addEventListener('input', renderFirst);
 $('#f-addr').addEventListener('input', renderFirst);
-// The submit event, not a click, so Save's guard and handler apply.
+// Keep the bottom Save as the default submit button for Enter in a field.
 $('#s-save').addEventListener('click', () => form.requestSubmit());
 $('#h-clear').addEventListener('click', () => {
   result('#h-result', '');
