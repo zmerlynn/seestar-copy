@@ -27,7 +27,7 @@ func TestLoadMissingIsDefaults(t *testing.T) {
 	}
 	home, _ := os.UserHomeDir()
 	want := Settings{Version: 1, Folder: filepath.Join(home, "Seestar"), IntervalMinutes: 5,
-		Excludes: []string{}, Includes: []string{}, SkipBuiltIn: true, StartCopying: true, OlderThanDays: 7}
+		Excludes: []string{}, Includes: []string{}, SkipBuiltIn: true, StartCopying: false, OlderThanDays: 7}
 	if f.exists || !reflect.DeepEqual(f.settings, want) {
 		t.Errorf("missing file = %+v (exists %v), want %+v", f.settings, f.exists, want)
 	}
@@ -44,9 +44,23 @@ func TestLoadAbsentFieldsTakeDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := Settings{Version: 1, Address: "192.0.2.10:445", Folder: "/data/Seestar", IntervalMinutes: 5,
-		Excludes: []string{}, Includes: []string{}, SkipBuiltIn: false, StartCopying: true, OlderThanDays: 7}
+		Excludes: []string{}, Includes: []string{}, SkipBuiltIn: false, StartCopying: false, OlderThanDays: 7}
 	if !f.exists || !reflect.DeepEqual(f.settings, want) {
 		t.Errorf("got %+v, want %+v", f.settings, want)
+	}
+}
+
+// A file saved with copying at startup on keeps it on; only new files
+// default to off.
+func TestLoadKeepsStartCopying(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "app.json")
+	writeFile(t, path, `{"version":1,"address":"192.0.2.10:445","folder":"/data/Seestar","start_copying":true}`)
+	f, err := loadSettings(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !f.settings.StartCopying {
+		t.Errorf("start_copying true loaded as %v", f.settings.StartCopying)
 	}
 }
 
