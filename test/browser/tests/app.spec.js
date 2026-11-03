@@ -25,19 +25,45 @@ test('Setup saves the address and folder and opens the Browse tab', async ({ pag
   await field(page, 'Folder for your images').fill(app.folder);
   await page.getByRole('button', { name: 'Save without copying' }).click();
 
+  // Save went away: focus is on the new state's heading, with Browse selected.
   await expect(tab(page, 'Browse')).toHaveAttribute('aria-selected', 'true');
-  await expect(tab(page, 'Browse')).toBeFocused();
+  await expect(page.locator('#h-main')).toBeFocused();
   await expect(page.locator('#haddr')).toHaveText(share);
   await expect(browseStatus(page)).toHaveText(rootStatus);
   // Browse's own header is hidden; its statuses are on, all new.
   await expect(frame(page).locator('header')).toBeHidden();
   await expect(frame(page).locator('#list.statuses')).toBeVisible();
   await expect(frame(page).locator('.badge.new').first()).toBeVisible();
-  // Test ran on Save; the header shows the contact.
+  // Test ran on Save; the header shows the contact, and focus stays.
   await expect(page.locator('#hdot')).toHaveText('Reachable');
+  await expect(page.locator('#h-main')).toBeFocused();
 
   const saved = readSettings(app.file);
   expect(saved).toMatchObject({ version: 1, address: share, folder: app.folder, interval_minutes: 5, skip_built_in: true, start_copying: true });
+});
+
+// countTests counts the page's Test requests.
+function countTests(page) {
+  const n = { tests: 0 };
+  page.on('request', (r) => {
+    if (r.url().endsWith('/app/api/test')) n.tests++;
+  });
+  return n;
+}
+
+test('a Test passed before Setup is saved shows in the header without another Test', async ({ page, startApp }) => {
+  const app = await startApp();
+  await openApp(page, app.url);
+  const n = countTests(page);
+  await field(page, 'Telescope address').fill(share);
+  await page.getByRole('button', { name: 'Test' }).click();
+  await expect(page.locator('#f-test')).toHaveText(connected);
+  await field(page, 'Folder for your images').fill(app.folder);
+  await page.getByRole('button', { name: 'Save without copying' }).click();
+  await expect(page.locator('#hdot')).toHaveText('Reachable');
+  await expect(page.locator('#hdot')).toBeVisible();
+  await expect(browseStatus(page)).toHaveText(rootStatus);
+  expect(n.tests).toBe(1);
 });
 
 test('Setup field errors block saving and focus the first field', async ({ page, startApp }) => {
@@ -181,11 +207,15 @@ test('Settings field errors show under each field and nothing is saved', async (
 test('a new address replaces Browse, and its errors say to select Share', async ({ page, startApp }) => {
   const app = await startApp(setUp('/nowhere'));
   await openApp(page, app.url);
+  const n = countTests(page);
   await expect(browseStatus(page)).toHaveText(rootStatus);
   await frame(page).getByRole('link', { name: 'MyWorks/', exact: true }).click();
   await expect(browseStatus(page)).toHaveText('1 folder, 0 files.');
 
   await tab(page, 'Settings').click();
+  await page.getByRole('button', { name: 'Test' }).click();
+  await expect(page.locator('#f-test')).toHaveText(connected);
+  await expect(page.locator('#hdot')).toHaveText('Reachable');
   await field(page, 'Telescope address').fill(refused);
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.locator('#f-saved')).toHaveText('Settings saved.');
@@ -199,12 +229,38 @@ test('a new address replaces Browse, and its errors say to select Share', async 
   await expect(browseStatus(page)).not.toContainText('reload');
 
   await tab(page, 'Settings').click();
+  // Back to the address that passed: its contact shows, with no new Test.
   await field(page, 'Telescope address').fill(share);
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.locator('#hdot')).toHaveText('Reachable');
+  await expect(page.locator('#hdot')).toBeVisible();
   await tab(page, 'Browse').click();
   // The frame is back at the share's top.
   await expect(browseStatus(page)).toHaveText(rootStatus);
+  expect(n.tests).toBe(2);
+});
+
+test('Save is off until its answer is in', async ({ page, startApp }) => {
+  const app = await startApp(setUp('/nowhere'));
+  await openApp(page, app.url);
+  await tab(page, 'Settings').click();
+  let posts = 0;
+  let release;
+  const held = new Promise((resolve) => (release = resolve));
+  await page.route('**/app/api/settings', async (route) => {
+    posts++;
+    await held;
+    await route.continue();
+  });
+  const save = page.getByRole('button', { name: 'Save', exact: true });
+  await save.click();
+  await expect(save).toBeDisabled();
+  // Enter in a field would submit again.
+  await field(page, 'Folder for your images').press('Enter');
+  release();
+  await expect(page.locator('#f-saved')).toHaveText('Settings saved.');
+  await expect(save).toBeEnabled();
+  expect(posts).toBe(1);
 });
 
 test('the app page refuses a request without its token', async ({ page, startApp }) => {

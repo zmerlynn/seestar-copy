@@ -8,7 +8,7 @@ const TABS = ['browse', 'settings'];
 const FIELDS = { address: '#f-addr', folder: '#f-folder', interval: '#f-int', excludes: '#f-ex', includes: '#f-in' };
 
 let saved = null; // the settings as saved
-let passed = ''; // the last address Test reached
+let passed = ''; // the address the last Test reached, until a Test of it fails
 
 async function api(path, body) {
   const init = { headers: { 'X-Seestar-Copy-Token': token } };
@@ -100,6 +100,7 @@ async function test() {
     return;
   }
   if (data.ok) passed = data.address;
+  else if (data.address === passed) passed = '';
   result('#f-test', data.message, data.ok ? 'ok' : 'err');
   contact(data.address, data.ok);
 }
@@ -111,8 +112,21 @@ function currentErrors() {
   return out;
 }
 
+// save sends the form; Save is disabled until the answer is in, so two
+// saves' answers can't arrive out of order.
 async function save(ev) {
   ev.preventDefault();
+  const btn = $('#f-save');
+  if (btn.disabled) return;
+  btn.disabled = true;
+  try {
+    await saveForm();
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function saveForm() {
   const setup = document.body.classList.contains('in-setup');
   result('#f-saved', '');
   const { status, data } = await api('settings', input());
@@ -129,18 +143,23 @@ async function save(ev) {
   saved = data.settings;
   fill(saved);
   $('#haddr').textContent = saved.address;
-  if (changed) $('#hdot').hidden = true;
   if (setup) {
+    // Save went away with Setup: focus moves to the new state's heading.
     main();
     select('browse');
-    $('#t-browse').focus();
+    $('#h-main').focus();
   } else {
     result('#f-saved', 'Settings saved.', 'ok');
   }
   if (data.browse_changed) $('#b-frame').src = '/';
-  // Test runs on Save if this address has not passed yet; a failure does
-  // not undo the save.
-  if (saved.address !== passed) test();
+  // The header shows a Test already passed for this address; otherwise
+  // Test runs on Save, and a failure does not undo the save.
+  if (saved.address === passed) {
+    contact(saved.address, true);
+  } else {
+    if (changed) $('#hdot').hidden = true;
+    test();
+  }
 }
 
 function select(tab) {
