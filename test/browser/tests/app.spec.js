@@ -292,11 +292,15 @@ test('Save is off until its answer is in', async ({ page, startApp }) => {
     await route.continue();
   });
   const save = page.getByRole('button', { name: 'Save', exact: true });
-  await save.click();
-  await expect(save).toBeDisabled();
-  // Enter in a field would submit again.
-  await field(page, 'Folder for your images').press('Enter');
-  release();
+  // A failure here still lets the held request go, so teardown can drain it.
+  try {
+    await save.click();
+    await expect(save).toBeDisabled();
+    // Enter in a field would submit again.
+    await field(page, 'Folder for your images').press('Enter');
+  } finally {
+    release();
+  }
   await expect(page.locator('#f-saved')).toHaveText('Settings saved.');
   await expect(save).toBeEnabled();
   expect(posts).toBe(1);
