@@ -11,20 +11,23 @@ const { expect } = base;
 const share = '127.0.0.1:14450';
 const refused = '127.0.0.1:1';
 
-// launch writes settings (an object, or a string as is; no file if
-// undefined) to app.json in dir and starts the app on it.
-async function launch(dir, settings) {
+// env is the environment of a program run with home as its home folder,
+// so that its state folder is home/config/seestar-copy.
+const env = (home) => ({ ...process.env, HOME: home, XDG_CONFIG_HOME: path.join(home, 'config') });
+
+// launch writes settings (an object, a function of the app's folder that
+// returns one, or a string as is; no file if undefined) to app.json in dir
+// and starts the app on it, with home as its home folder (dir if not given).
+async function launch(dir, settings, home = dir) {
   const file = path.join(dir, 'config', 'app.json');
-  const folder = path.join(dir, 'Seestar');
+  const folder = path.join(home, 'Seestar');
+  if (typeof settings === 'function') settings = settings(folder);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   if (settings !== undefined) {
     fs.writeFileSync(file, typeof settings === 'string' ? settings : JSON.stringify(settings));
   }
-  const child = spawn(process.env.APP_BIN, ['--settings', file], {
-    env: { ...process.env, HOME: dir, XDG_CONFIG_HOME: path.join(dir, 'config') },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  const app = { file, folder, home: dir, child, log: '' };
+  const child = spawn(process.env.APP_BIN, ['--settings', file], { env: env(home), stdio: ['ignore', 'pipe', 'pipe'] });
+  const app = { file, folder, home, child, log: '' };
   child.stderr.on('data', (b) => (app.log += b));
   app.exited = new Promise((resolve) => child.on('exit', resolve));
   app.url = await new Promise((resolve, reject) => {
@@ -40,13 +43,14 @@ async function launch(dir, settings) {
 
 // test gives each test startApp, which returns the app's URL, settings
 // file and folder for images; every app is stopped after the test and its
-// log attached.
+// log attached. startApp(settings, home) shares another app's home, and so
+// its state folder.
 const test = base.test.extend({
   // eslint-disable-next-line no-empty-pattern
   startApp: async ({}, use, testInfo) => {
     const apps = [];
-    await use(async (settings) => {
-      const app = await launch(testInfo.outputPath('app-' + apps.length), settings);
+    await use(async (settings, home) => {
+      const app = await launch(testInfo.outputPath('app-' + apps.length), settings, home);
       apps.push(app);
       return app;
     });
@@ -72,4 +76,4 @@ async function openApp(page, url) {
   await expect(page.locator('#loading')).toBeHidden();
 }
 
-module.exports = { test, expect, share, refused, readSettings, frame, browseStatus, tab, field, openApp };
+module.exports = { test, expect, share, refused, env, readSettings, frame, browseStatus, tab, field, openApp };

@@ -299,6 +299,7 @@ jobs:
       - name: Start browse
         run: |
           go build -o "$RUNNER_TEMP/seestar-copy-cli" ./cmd/seestar-copy-cli
+          echo "CLI_BIN=$RUNNER_TEMP/seestar-copy-cli" >> "$GITHUB_ENV"
           "$RUNNER_TEMP/seestar-copy-cli" browse --endpoint 127.0.0.1:14450 --listen 127.0.0.1:0 \
             > "$RUNNER_TEMP/browse.url" 2> "$RUNNER_TEMP/browse.log" &
           for try in $(seq 50); do

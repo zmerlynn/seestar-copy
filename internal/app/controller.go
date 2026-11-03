@@ -497,7 +497,7 @@ func (c *controller) view(now time.Time) copyView {
 		v.Text = "No files were copied. Trying again at " + at(st.next) + "."
 	case stUnreachable:
 		v.Title = "Can't reach the telescope at " + st.endpoint + "."
-		v.Text = "Trying again at " + at(st.next) + ". Check that the telescope is on and on the same network as this computer, or that seestar-wormhole is running."
+		v.Text = "Trying again at " + at(st.next) + ". Check that the telescope is on and on the same network as this computer, or that seestar-wormhole is running. Copying stays on and keeps trying."
 	case stStopping:
 		v.Title = "Stopping…"
 	case stStopped:
@@ -513,8 +513,8 @@ func (c *controller) view(now time.Time) copyView {
 		}
 		v.Text = strings.Join(parts, " ")
 	case stInUse:
-		v.Title = "Another copy is already using this folder: another seestar-copy window or seestar-copy-cli."
-		v.Text = "Stop that copy, then start copying here."
+		v.Title = "Another copy is already using this folder."
+		v.Text = "It's in another seestar-copy window or seestar-copy-cli. Stop that copy, then start copying here."
 	case stCantWrite:
 		v.Title = "Can't write to " + st.folder + ": " + st.reason + "."
 		v.Text = "Choose a writable folder in Settings, then start copying."
