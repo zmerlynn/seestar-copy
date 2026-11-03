@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/zmerlynn/seestar-copy/internal/plan"
 	"github.com/zmerlynn/seestar-copy/internal/remote"
@@ -261,5 +262,99 @@ func TestDeleteStop(t *testing.T) {
 	}
 	if !strings.Contains(logs.String(), `msg="deletion stopped" deleted=2 `) {
 		t.Errorf("want a deletion stopped line with deleted=2 in:\n%s", logs.String())
+	}
+}
+
+// A confirmation proven by the copies checks each file Only holds against
+// its local copy again: a copy moved away, corrupted or resized since the
+// preview keeps the file. Hashed counts only the bytes the checks read.
+func TestDeleteOnlyProof(t *testing.T) {
+	s := newShare(t)
+	files := map[string]string{
+		"MyWorks/a.jpg":    "aaaa",
+		"MyWorks/gone.jpg": "gggggggg",
+		"MyWorks/bad.jpg":  "bbbbbbbbbbbbbbbb",
+		"MyWorks/size.jpg": strings.Repeat("s", 32),
+	}
+	for p, data := range files {
+		put(t, s.dir, p, data)
+		put(t, s.dest, p, data)
+	}
+	s.record(t, files)
+	o := s.options()
+	o.DryRun = true
+	preview, err := RunDelete(t.Context(), o, discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	only := map[string]bool{}
+	for _, f := range preview.Files {
+		if f.Outcome == FileDeleted {
+			only[f.Path] = true
+		}
+	}
+	if len(only) != len(files) {
+		t.Fatalf("preview: got outcomes %q, want every file deleted", outcomes(preview))
+	}
+	// Since the preview, one copy was moved away, one corrupted at the
+	// same size and one resized.
+	if err := os.Remove(filepath.Join(s.dest, "MyWorks", "gone.jpg")); err != nil {
+		t.Fatal(err)
+	}
+	put(t, s.dest, "MyWorks/bad.jpg", strings.Repeat("x", 16))
+	put(t, s.dest, "MyWorks/size.jpg", "s")
+	o = s.options()
+	o.Only = only
+	var hashed [][2]int64
+	o.Hooks.Hashed = func(done, total int64) { hashed = append(hashed, [2]int64{done, total}) }
+	r, err := RunDelete(t.Context(), o, discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []DeleteFile{
+		{"MyWorks/size.jpg", 32, FileKept, "local copy size differs from the state"},
+		{"MyWorks/gone.jpg", 8, FileKept, "local copy missing; give --trust-state if it was moved"},
+		{"MyWorks/bad.jpg", 16, FileKept, "local copy's SHA-256 differs from the state"},
+		{"MyWorks/a.jpg", 4, FileDeleted, ""},
+	}
+	if !slices.Equal(r.Files, want) {
+		t.Errorf("got files %+v, want %+v", r.Files, want)
+	}
+	for _, p := range []string{"MyWorks/size.jpg", "MyWorks/gone.jpg", "MyWorks/bad.jpg"} {
+		if !s.has(t, p) {
+			t.Errorf("%s: gone from the device, want it kept", p)
+		}
+	}
+	if s.has(t, "MyWorks/a.jpg") {
+		t.Error("MyWorks/a.jpg: still on the device, want it deleted")
+	}
+	// The resized and missing copies are not read; the corrupted one is.
+	if want := [][2]int64{{0, 60}, {0, 60}, {16, 60}, {20, 60}}; !slices.Equal(hashed, want) {
+		t.Errorf("got Hashed %v, want %v", hashed, want)
+	}
+}
+
+// A real run counts the folder it emptied, and a file younger than
+// OlderThan is in the result as recent.
+func TestDeleteResultFoldersAndRecent(t *testing.T) {
+	s := newShare(t)
+	put(t, s.dir, "Done/a.jpg", "a")
+	put(t, s.dir, "MyWorks/new.jpg", "new")
+	now := time.Now()
+	if err := os.Chtimes(filepath.Join(s.dir, "MyWorks", "new.jpg"), now, now); err != nil {
+		t.Fatal(err)
+	}
+	o := s.options()
+	o.IgnoreState, o.OlderThan = true, 24*time.Hour
+	r, err := RunDelete(t.Context(), o, discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []DeleteFile{{"MyWorks/new.jpg", 3, FileRecent, ""}, {"Done/a.jpg", 1, FileDeleted, ""}}
+	if !slices.Equal(r.Files, want) {
+		t.Errorf("got files %+v, want %+v", r.Files, want)
+	}
+	if r.Folders != 1 || s.has(t, "Done") || !s.has(t, "MyWorks/new.jpg") {
+		t.Errorf("got %d folders, want 1: Done removed and MyWorks/new.jpg kept", r.Folders)
 	}
 }

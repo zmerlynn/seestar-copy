@@ -296,8 +296,8 @@ func (d *deleter) file(ctx context.Context, e remote.Entry, dec plan.DeleteDecis
 		return false, nil
 	}
 	if d.dest != nil {
-		reason, warn, err := proveFile(ctx, d.dest, e.Path, d.records[e.Path])
-		d.hashed += e.Size
+		reason, warn, n, err := proveFile(ctx, d.dest, e.Path, d.records[e.Path])
+		d.hashed += n
 		if h := d.opts.Hooks.Hashed; h != nil {
 			h(d.hashed, d.toHash)
 		}
@@ -406,37 +406,38 @@ func (d *deleter) folder(ctx context.Context, p string) (bool, error) {
 // must be a regular file of the recorded size whose SHA-256 is the
 // recorded one. It returns the reason to keep the file, if any, with
 // whether that is worth a warning, or an error if the copy could not be
-// read. It only reads.
-func proveFile(ctx context.Context, dest *os.Root, p string, rec state.Record) (reason string, warn bool, err error) {
+// read, and the bytes it read. It only reads.
+func proveFile(ctx context.Context, dest *os.Root, p string, rec state.Record) (reason string, warn bool, n int64, err error) {
 	const missing = "local copy missing; give --trust-state if it was moved"
 	name := filepath.FromSlash(p)
 	fi, err := dest.Lstat(name)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
-		return missing, false, nil
+		return missing, false, 0, nil
 	case err != nil:
-		return "", false, err
+		return "", false, 0, err
 	case !fi.Mode().IsRegular():
-		return "local copy is not a regular file", true, nil
+		return "local copy is not a regular file", true, 0, nil
 	case fi.Size() != rec.Size:
-		return "local copy size differs from the state", true, nil
+		return "local copy size differs from the state", true, 0, nil
 	}
 	f, err := dest.Open(name)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
-		return missing, false, nil
+		return missing, false, 0, nil
 	case err != nil:
-		return "", false, err
+		return "", false, 0, err
 	}
 	defer f.Close()
 	h := sha256.New()
-	if _, err := io.Copy(h, ctxReader{ctx, f}); err != nil {
-		return "", false, err
+	n, err = io.Copy(h, ctxReader{ctx, f})
+	switch {
+	case err != nil:
+		return "", false, n, err
+	case hex.EncodeToString(h.Sum(nil)) != rec.SHA256:
+		return "local copy's SHA-256 differs from the state", true, n, nil
 	}
-	if hex.EncodeToString(h.Sum(nil)) != rec.SHA256 {
-		return "local copy's SHA-256 differs from the state", true, nil
-	}
-	return "", false, nil
+	return "", false, n, nil
 }
 
 // ctxReader stops reading once ctx is done, so a stop ends a long hash.

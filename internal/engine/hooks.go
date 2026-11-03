@@ -25,8 +25,10 @@ type Hooks struct {
 	// number of listed files it will decide on.
 	Checked func(files int)
 	// Hashed is called in a delete run after each local copy is checked
-	// against its SHA-256, with the bytes checked so far and the bytes
-	// all such checks of the run will read.
+	// against its SHA-256, with the bytes read so far and the bytes all
+	// such checks of the run plan to read: the listed sizes of the files
+	// to check. A copy that is missing, of another size or unreadable is
+	// read in part or not at all, so a run can finish below that total.
 	Hashed func(done, total int64)
 	// Deleted is called after each file a delete run removed from the
 	// device, with its listed size. A dry run removes nothing and never
