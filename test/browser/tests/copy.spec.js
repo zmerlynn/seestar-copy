@@ -78,7 +78,7 @@ test('Clear history forgets the folder, and the next pass copies nothing again',
   expect(fs.existsSync(history)).toBe(true);
   // Cancel keeps it; focus goes back to the button.
   await button(page, 'Clear history…').click();
-  await expect(page.getByRole('dialog', { name: 'Clear the copy history?' })).toContainText('Files still in the folder are kept');
+  await expect(page.getByRole('dialog', { name: 'Clear the copy history?' })).toContainText('No images will be deleted.');
   await page.keyboard.press('Escape');
   await expect(button(page, 'Clear history…')).toBeFocused();
   expect(fs.existsSync(history)).toBe(true);
