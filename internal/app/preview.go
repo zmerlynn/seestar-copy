@@ -100,7 +100,7 @@ func (p *previewer) start(set Settings) error {
 			return sess, err
 		},
 		Hooks: engine.Hooks{
-			Listed: func(n int) {
+			Listed: func(_ string, n int) {
 				p.mu.Lock()
 				defer p.mu.Unlock()
 				if p.st.state == pvRunning {

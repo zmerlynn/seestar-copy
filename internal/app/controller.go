@@ -276,7 +276,7 @@ func (c *controller) dialPass(ctx context.Context, endpoint string) (remote.Sess
 // done, from a stopped pass, change only the stop's counts.
 func (c *controller) hooks(ctx context.Context) engine.Hooks {
 	return engine.Hooks{
-		Listed: func(n int) {
+		Listed: func(_ string, n int) {
 			c.mu.Lock()
 			defer c.mu.Unlock()
 			if ctx.Err() == nil {
