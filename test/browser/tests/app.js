@@ -53,16 +53,19 @@ const test = base.test.extend({
       apps.push(app);
       return app;
     });
-    // The pages stop polling, and a route still fetching is dropped, before
-    // the apps they talk to stop.
-    for (const p of context.pages()) {
-      await p.unrouteAll({ behavior: 'ignoreErrors' });
-      await p.close();
-    }
-    for (const app of apps) {
-      app.child.kill('SIGINT');
-      await app.exited;
-      await testInfo.attach('app log', { body: app.log, contentType: 'text/plain' });
+    // Each page's route handlers finish, and the page stops polling, while
+    // its app still runs; the apps stop even if that fails.
+    try {
+      for (const p of context.pages()) {
+        await p.unrouteAll({ behavior: 'wait' });
+        await p.close();
+      }
+    } finally {
+      for (const app of apps) {
+        app.child.kill('SIGINT');
+        await app.exited;
+        await testInfo.attach('app log', { body: app.log, contentType: 'text/plain' });
+      }
     }
   },
 });
