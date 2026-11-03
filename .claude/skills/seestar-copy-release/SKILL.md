@@ -35,8 +35,9 @@ with `--network none`, following
 - [ ] an artifact-only workflow dispatch with an RC version produces all five
   downloads and the single `SHA256SUMS`, with a signed and notarized DMG
   holding `seestar-copy.app`;
-- [ ] `--version` prints the version, commit and platform, and `licenses`
-  lists `github.com/hirochachacha/go-smb2/v2`.
+- [ ] the host's CLI part in `dist/parts/` prints the version, commit and
+  platform with `--version`, and `licenses` lists
+  `github.com/hirochachacha/go-smb2/v2`.
 
 ## 3. Check the compatibility record
 

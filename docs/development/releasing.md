@@ -33,16 +33,19 @@ Command Line Tools and Go 1.27.3. App builds use the `gui,production` tags.
    timestamp. Reproduction needs the same source, version, revision and Go
    toolchain. Stripping keeps Go's module information, which `licenses`
    reads.
-4. Unpack the archive for your host and run `seestar-copy-cli --version` and
-   `seestar-copy-cli licenses` (with `.exe` on Windows). Check the version,
-   commit and platform, and that the licenses include
+4. Run the CLI part for your host from `dist/parts/` with `--version` and
+   with `licenses`, such as
+   `dist/parts/seestar-copy-cli_v0.1.0_linux_amd64 --version`. Check the
+   version, commit and platform, and that the licenses include
    `Module: github.com/hirochachacha/go-smb2/v2`.
 5. Rehearse the whole workflow from a branch with **Run workflow** and a
    valid `version` input, such as
    `gh workflow run release.yml --ref <branch> -f version=v0.1.0-rc.0`. A
    manual run builds all five downloads, writes `SHA256SUMS`, attests them
    and uploads a `release-assets-<version>` workflow artifact. It never
-   creates a GitHub Release.
+   creates a GitHub Release. Download the artifact, unpack the Linux and
+   Windows archives, and compare their CLIs byte for byte with the parts
+   from a local run of the same version at the same commit.
 6. When ready, create an annotated version tag at the intended commit and
    push it. The workflow runs CI, builds on the platforms above, assembles
    the five downloads, checks their exact inventory, writes `SHA256SUMS` and
