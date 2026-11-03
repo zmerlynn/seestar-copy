@@ -410,10 +410,10 @@ func (s *server) freeAction(w http.ResponseWriter, in input) {
 			return
 		}
 		// Holding s.mu keeps a Save from landing between the read and
-		// the start.
+		// the start; it is released before logging or answering.
 		s.mu.Lock()
-		defer s.mu.Unlock()
 		if !s.file.setUp() {
+			s.mu.Unlock()
 			conflict("Couldn't find files: " + errNotSetUp.Error() + ".")
 			return
 		}
@@ -421,12 +421,15 @@ func (s *server) freeAction(w http.ResponseWriter, in input) {
 		set.OlderThanDays, set.TrustState = days, in.Trust
 		if set.OlderThanDays != old.OlderThanDays || set.TrustState != old.TrustState {
 			if err := s.file.save(set); err != nil {
+				s.mu.Unlock()
 				s.log.Error("save settings", "path", s.file.path, "err", err)
 				conflict("Couldn't save the options: " + reason(err) + ". Try again.")
 				return
 			}
 		}
-		if err := s.free.find(set); err != nil {
+		err = s.free.find(set)
+		s.mu.Unlock()
+		if err != nil {
 			conflict("Couldn't find files: " + err.Error() + ".")
 			return
 		}
