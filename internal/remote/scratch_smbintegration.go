@@ -31,17 +31,24 @@ func FillScratch(ctx context.Context, r *SMBRemover, dir string, files map[strin
 	if err := r.share.RemoveAll(ctx, dir); err != nil {
 		return err
 	}
-	settled := time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC)
 	for p, data := range files {
-		if err := r.share.MkdirAll(ctx, path.Dir(p), 0o755); err != nil {
-			return err
-		}
-		if err := r.share.WriteFile(ctx, p, []byte(data), 0o644); err != nil {
-			return err
-		}
-		if err := r.share.Chtimes(ctx, p, settled, settled); err != nil {
+		if err := PutScratch(ctx, r, p, data); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// PutScratch writes the scratch share's file p with data, and its
+// folders, modified in 2020.
+func PutScratch(ctx context.Context, r *SMBRemover, p, data string) error {
+	readonly.Check("remote.PutScratch")
+	settled := time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC)
+	if err := r.share.MkdirAll(ctx, path.Dir(p), 0o755); err != nil {
+		return err
+	}
+	if err := r.share.WriteFile(ctx, p, []byte(data), 0o644); err != nil {
+		return err
+	}
+	return r.share.Chtimes(ctx, p, settled, settled)
 }
