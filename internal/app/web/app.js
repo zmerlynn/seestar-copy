@@ -536,13 +536,17 @@ async function confirmDelete() {
 }
 
 // clip copies s to the clipboard and says so on the button for a moment.
-async function clip(btn, s) {
+// For a path, the status region live also says so, in words a screen
+// reader announces.
+async function clip(btn, s, live, copied) {
   const label = (btn.dataset.label ||= btn.textContent);
   try {
     await navigator.clipboard.writeText(s);
     btn.textContent = 'Copied';
+    if (live) result(live, copied, 'ok');
   } catch {
     btn.textContent = "Couldn't copy";
+    if (live) result(live, "Couldn't copy the path. Select it and copy it manually.", 'err');
   }
   setTimeout(() => (btn.textContent = label), 2000);
 }
@@ -605,8 +609,10 @@ $('#s-stop').addEventListener('click', (ev) => press(ev, 'stop'));
 $('#c-clip').addEventListener('click', (ev) =>
   clip(ev.currentTarget, [...$('#c-log').children].map((li) => li.textContent).join('\n')),
 );
-$('#h-clip').addEventListener('click', (ev) => clip(ev.currentTarget, history));
-$('#s-clip').addEventListener('click', (ev) => clip(ev.currentTarget, $('#s-file').textContent));
+$('#h-clip').addEventListener('click', (ev) => clip(ev.currentTarget, history, '#h-result', 'Copy history path copied.'));
+$('#s-clip').addEventListener('click', (ev) =>
+  clip(ev.currentTarget, $('#s-file').textContent, '#f-saved', 'Settings file path copied.'),
+);
 $('#f-folder').addEventListener('input', renderHistory);
 $('#h-clear').addEventListener('click', () => {
   result('#h-result', '');

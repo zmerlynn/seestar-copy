@@ -333,8 +333,13 @@ test('Settings shows the history and settings files, with Copy buttons', async (
   const first = await history.textContent();
   await page.locator('#h-clip').click();
   await expect(page.locator('#h-clip')).toHaveText('Copied');
+  await expect(page.locator('#h-result')).toHaveText('Copy history path copied.');
   await page.locator('#s-clip').click();
+  await expect(page.locator('#f-saved')).toHaveText('Settings file path copied.');
   expect(await page.evaluate(() => window.copied)).toEqual([first, app.file]);
+  await page.evaluate(() => (navigator.clipboard.writeText = async () => { throw new Error('denied'); }));
+  await page.locator('#h-clip').click();
+  await expect(page.locator('#h-result')).toHaveText("Couldn't copy the path. Select it and copy it manually.");
 
   // A folder from the desktop picker is an edit too.
   await page.route('**/app/api/folder', (route) => route.fulfill({ json: { folder: app.folder } }));
