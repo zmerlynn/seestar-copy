@@ -336,6 +336,12 @@ test('Settings shows the history and settings files, with Copy buttons', async (
   await page.locator('#s-clip').click();
   expect(await page.evaluate(() => window.copied)).toEqual([first, app.file]);
 
+  // A folder from the desktop picker is an edit too.
+  await page.route('**/app/api/folder', (route) => route.fulfill({ json: { folder: app.folder } }));
+  await page.locator('#f-choose').dispatchEvent('click');
+  await expect(field(page, 'Folder for your images')).toHaveValue(app.folder);
+  expect(await page.locator('#h-saved').isHidden()).toBe(true);
+
   // An edited folder has no history to show until it is saved.
   await field(page, 'Folder for your images').fill(app.folder);
   await expect(page.locator('#h-unsaved')).toHaveText("Save to see this folder's copy history.");

@@ -125,6 +125,7 @@ async function choose() {
   const { status, data } = await api('folder', { folder: $('#f-folder').value });
   if (status === 200 && data && data.folder) {
     $('#f-folder').value = data.folder;
+    renderHistory();
     showErrors({ ...currentErrors(), folder: '' });
   } else if (status !== 200) {
     showErrors({ ...currentErrors(), folder: (data && data.error) || "Couldn't open the folder picker. Type the folder's full path instead." });
