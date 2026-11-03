@@ -189,7 +189,21 @@ test('a check names the folder or file it is looking at, and announces only its 
   f = { state: 'deleting', title: 'Deleting 1 of 2…', progress: { done: 0, total: 2 }, file: 'Checking MyWorks/M 31/a.fit…' };
   await expect(live).toHaveText('Deleting 1 of 2…');
   await expect(file).toHaveText('Checking MyWorks/M 31/a.fit…');
+  // Stop stays put while the line changes, even when it is empty.
+  const stop = button(page, 'Stop');
+  const y = async () => (await stop.boundingBox()).y;
+  const at = await y();
+  f = { state: 'deleting', title: 'Deleting 1 of 2…', progress: { done: 0, total: 2 } };
+  await expect(file).toHaveText('');
+  await expect(file).toBeVisible();
+  expect(await y()).toBe(at);
   f = { state: 'deleting', title: 'Deleting 2 of 2…', progress: { done: 1, total: 2 }, file: 'Last deleted: MyWorks/M 31/a.fit' };
   await expect(file).toHaveText('Last deleted: MyWorks/M 31/a.fit');
+  expect(await y()).toBe(at);
   await expect(live).toHaveText('Deleting 1 of 2…');
+  // A finished run clears and hides the line.
+  f = { state: 'done', title: 'Deleted 2 files' };
+  await expect(file).toBeHidden();
+  await expect(file).toHaveText('');
+  await expect(file).toHaveAttribute('title', '');
 });

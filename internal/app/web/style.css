@@ -79,7 +79,10 @@ fieldset:disabled { opacity: 0.6; }
 @media (prefers-color-scheme: dark) { .btn.danger { color: #161616; } }
 .notice.ok { border-left-color: var(--ok); }
 .notice:empty { display: none; }
-#x-box p:empty { display: none; }
+#x-box p:not(.crawl):empty { display: none; }
+/* #x-file shows only while a check or delete runs, and keeps its line then
+   even when empty, so Stop stays put. */
+#x-file:empty::before { content: '\a0'; }
 .scroll { overflow-x: auto; margin: 0.8rem 0; }
 table.groups { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
 table.groups th, table.groups td { text-align: left; padding: 0.3rem 0.5rem; border-bottom: 1px solid var(--line2); vertical-align: top; }

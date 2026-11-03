@@ -404,6 +404,7 @@ const XSHOWS = {
   '#x-go': ['preview'],
   '#x-change': ['preview'],
   '#x-deleting': ['deleting'],
+  '#x-file': ['checking', 'deleting'],
   '#x-stop': ['deleting'],
   '#x-done': ['done', 'stopped', 'failed'],
 };
