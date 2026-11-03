@@ -88,7 +88,7 @@ func TestPreview(t *testing.T) {
 	if v == nil || v.State != pvDone || v.Title != "Would copy 5 files (21 B)" {
 		t.Fatalf("got %+v, want 5 files to copy", v)
 	}
-	if want := "Already copied 1 · Already in your folder 1 · Still being written 1 · Can't copy 2 · Left out 1"; v.Sub != want {
+	if want := "Already copied or in your folder 2 · Still being written 1 · Can't copy 2 · Left out 1"; v.Sub != want {
 		t.Errorf("sub: got %q, want %q", v.Sub, want)
 	}
 	var got []string

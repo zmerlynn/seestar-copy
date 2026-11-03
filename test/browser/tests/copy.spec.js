@@ -303,7 +303,7 @@ test('Preview shows what Start would copy by folder and copies nothing; Start di
   await expect(title(page)).toHaveText(off);
   await button(page, 'Preview').click();
   await expect(ptitle).toHaveText('Nothing to copy.', { timeout: 30000 });
-  await expect(page.locator('#c-psub')).toHaveText('Already copied 7');
+  await expect(page.locator('#c-psub')).toHaveText('Already copied or in your folder 7');
   await expect(page.locator('#c-ptable')).toBeHidden();
 });
 

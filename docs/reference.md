@@ -1277,8 +1277,8 @@ setting.
 While copying is off, **Preview** on the Copy tab shows what **Start
 copying** would do, from one [dry run](#dry-run) with the saved settings: how
 many files it would copy and their size, with a row per folder, then how many
-are already copied, already in your folder (adopted), still being written,
-can't be copied, or left out by the selection. A replaced file counts as a
+are already copied or in your folder, still being written, can't be
+copied, or left out by the selection. A replaced file counts as a
 copy. Nothing is copied, and the state file and the folder are not changed.
 **Cancel** stops a preview that is running. Start copying, a Save that
 changes the address, folder or selection, and Clear history discard the

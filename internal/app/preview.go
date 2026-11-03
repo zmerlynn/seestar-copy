@@ -56,8 +56,7 @@ type previewStatus struct {
 	files   int // copies and replacements
 	bytes   int64
 	groups  []folderGroup
-	already int // copied before, unchanged
-	adopt   int
+	already int // copied before, or in the folder to adopt
 	wait    int
 	leftOut int
 	failed  int
@@ -145,10 +144,8 @@ func decided(ds []plan.Decision, out engine.LeftOut) *previewStatus {
 		case copies(d):
 			st.files++
 			st.bytes += d.Size
-		case d.Kind == plan.Done:
+		case d.Kind == plan.Done || d.Kind == plan.Adopt:
 			st.already++
-		case d.Kind == plan.Adopt:
-			st.adopt++
 		case d.Kind == plan.Wait:
 			st.wait++
 		case d.Kind == plan.Fail:
@@ -242,8 +239,7 @@ func (p *previewer) view() *previewView {
 			n    int
 			text string
 		}{
-			{st.already, "Already copied"},
-			{st.adopt, "Already in your folder"},
+			{st.already, "Already copied or in your folder"},
 			{st.wait, "Still being written"},
 			{st.failed, "Can't copy"},
 			{st.leftOut, "Left out"},
