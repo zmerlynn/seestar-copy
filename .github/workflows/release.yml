@@ -50,7 +50,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Build six CLI executables
+      - name: Build six CLI and two Windows app executables
         env:
           RELEASE_VERSION: ${{ needs.validate.outputs.version }}
         run: |
@@ -61,6 +61,51 @@ jobs:
         with:
           name: release-part-portable
           path: dist/parts/*
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
+
+  linux-app:
+    # The app's window needs cgo with GTK 4 and WebKitGTK 6.0, so each Linux
+    # app builds on its own architecture's runner.
+    needs: [validate, verify]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.3'
+          cache: false
+      - name: Install Linux native dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libgtk-4-dev libwebkitgtk-6.0-dev
+      - name: Build the Linux app
+        env:
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: '1'
+          GOAMD64: v1
+          GOARM64: v8.0
+        run: |
+          mkdir -p dist
+          go build -tags gui,production -trimpath -buildvcs=false \
+            -ldflags="-s -w -X main.version=$RELEASE_VERSION" \
+            -o "dist/seestar-copy_${RELEASE_VERSION}_linux_${GOARCH}" ./cmd/seestar-copy
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-part-linux-${{ matrix.arch }}
+          path: dist/*
           if-no-files-found: error
           retention-days: 7
           overwrite: true
@@ -111,7 +156,7 @@ jobs:
           overwrite: true
 
   release:
-    needs: [validate, verify, portable, macos]
+    needs: [validate, verify, portable, linux-app, macos]
     runs-on: ubuntu-24.04
     container: golang:1.27.3
     permissions:
