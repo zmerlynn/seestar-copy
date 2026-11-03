@@ -268,7 +268,7 @@ jobs:
       - name: SMB integration tests
         env:
           SEESTAR_COPY_SMB_ENDPOINT: 127.0.0.1:14450
-        run: go test -tags smbintegration -race -count=1 -timeout 10m -v ./internal/remote
+        run: go test -tags smbintegration -race -count=1 -timeout 10m -v ./internal/remote ./internal/app
       - name: Samba log
         if: failure()
         run: docker logs samba
