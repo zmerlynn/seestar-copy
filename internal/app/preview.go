@@ -158,11 +158,7 @@ func decided(ds []plan.Decision, out engine.LeftOut) *previewStatus {
 				return
 			}
 		}
-	})
-	// The page shows no file list for a copy preview.
-	for i := range st.groups {
-		st.groups[i].Files = nil
-	}
+	}, false)
 	return st
 }
 

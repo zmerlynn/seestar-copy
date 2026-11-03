@@ -120,7 +120,7 @@ func (st *freeStatus) view() freeView {
 					return
 				}
 			}
-		})
+		}, true)
 		v.Groups, v.ID, v.Trust = groups, st.id, st.set.TrustState
 		v.Title = fmt.Sprintf("%s (%s) are copied and safe to delete.", many(n, "file", "files"), size(float64(bytes)))
 		if n == 1 {
@@ -190,9 +190,9 @@ func (st *freeStatus) view() freeView {
 }
 
 // groupByFolder groups files, given as path and size, by folder: groups
-// in folder order, with the share's root named Share, and files in path
-// order.
-func groupByFolder(files iter.Seq2[string, int64]) []folderGroup {
+// in folder order, with the share's root named Share, and, with keepFiles,
+// each group's files in path order.
+func groupByFolder(files iter.Seq2[string, int64], keepFiles bool) []folderGroup {
 	var groups []folderGroup
 	for p, n := range files {
 		dir := path.Dir(p)
@@ -208,7 +208,9 @@ func groupByFolder(files iter.Seq2[string, int64]) []folderGroup {
 		g := &groups[i]
 		g.Count++
 		g.Bytes += n
-		g.Files = append(g.Files, freeFile{p, size(float64(n))})
+		if keepFiles {
+			g.Files = append(g.Files, freeFile{p, size(float64(n))})
+		}
 	}
 	slices.SortFunc(groups, func(a, b folderGroup) int { return strings.Compare(a.Folder, b.Folder) })
 	for i := range groups {
