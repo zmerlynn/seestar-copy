@@ -21,8 +21,8 @@ telescope is somewhere else.
   you.
 - It isn't a general SMB client. It always logs in as guest to the
   telescope's `EMMC Images` share.
-- It doesn't limit its bandwidth, and it has no configuration file: every
-  setting is a flag.
+- It doesn't limit its bandwidth, and the command-line tool has no
+  configuration file: every setting is a flag.
 
 ## Install
 
@@ -42,6 +42,12 @@ your `PATH`, such as `/usr/local/bin` on Linux or macOS. Then check it with:
 ```sh
 seestar-copy-cli --version
 ```
+
+Every download also has the desktop app, `seestar-copy`, which copies,
+browses and frees up space in a window. On macOS, drag `seestar-copy.app`
+from the DMG to Applications and open it. On Windows, open
+`seestar-copy.exe`. On Linux, run `./seestar-copy`; it needs GTK 4 and
+WebKitGTK 6.0. See [the desktop app](docs/reference.md#the-desktop-app).
 
 Every download also has the LICENSE and NOTICE files. To check a download's
 checksum and build provenance, see
