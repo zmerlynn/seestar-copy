@@ -234,7 +234,27 @@ func TestRecreate(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
 			done := make(chan error)
 			go func() { done <- RunSync(ctx, o, discard) }()
-			if s := <-sums; s.Copied != 1 {
+			// Each wait is bounded, so a lost pass fails here, not at the
+			// package timeout.
+			next := func() Summary {
+				t.Helper()
+				select {
+				case s := <-sums:
+					return s
+				case <-time.After(10 * time.Second):
+					t.Fatal("no pass ended")
+					return Summary{}
+				}
+			}
+			press := func() {
+				t.Helper()
+				select {
+				case check <- struct{}{}:
+				case <-time.After(10 * time.Second):
+					t.Fatal("the loop did not take Check now")
+				}
+			}
+			if s := next(); s.Copied != 1 {
 				t.Fatalf("first pass: got %+v, want 1 copied", s)
 			}
 			if err := os.RemoveAll(o.Dest); err != nil {
@@ -242,12 +262,12 @@ func TestRecreate(t *testing.T) {
 			}
 			// A new file waits one pass to be seen unchanged.
 			files["MyWorks/b.jpg"] = file("b")
-			check <- struct{}{}
-			if s := <-sums; s.Waiting != 1 {
+			press()
+			if s := next(); s.Waiting != 1 {
 				t.Fatalf("second pass: got %+v, want b.jpg waiting", s)
 			}
-			check <- struct{}{}
-			s := <-sums
+			press()
+			s := next()
 			if _, err := state.Open(o.StateDir, o.Dest, discard); !errors.Is(err, state.ErrLocked) {
 				t.Errorf("a second open during the loop: got %v, want ErrLocked", err)
 			}
@@ -260,8 +280,13 @@ func TestRecreate(t *testing.T) {
 				t.Errorf("third pass: got %+v and stat %v, want b.jpg failed and absent", s, statErr)
 			}
 			cancel()
-			if err := <-done; err != nil {
-				t.Errorf("got err %v after a stop, want nil", err)
+			select {
+			case err := <-done:
+				if err != nil {
+					t.Errorf("got err %v after a stop, want nil", err)
+				}
+			case <-time.After(10 * time.Second):
+				t.Fatal("the loop did not return after a stop")
 			}
 		})
 	}

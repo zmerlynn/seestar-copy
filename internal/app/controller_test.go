@@ -109,7 +109,11 @@ func (e *copyEnv) next() copyView {
 	}
 	// A press is received only by a wait, so press again only if no pass
 	// started for a while.
+	deadline := time.Now().Add(10 * time.Second)
 	for started := false; !started; {
+		if time.Now().After(deadline) {
+			e.t.Fatal("Check now started no pass")
+		}
 		e.c.check()
 		for i := 0; i < 50 && !started; i++ {
 			time.Sleep(time.Millisecond)
@@ -192,12 +196,17 @@ func TestCopyStopMidFile(t *testing.T) {
 	if err := e.c.start(e.set); err != nil {
 		t.Fatal(err)
 	}
-	<-held
+	select {
+	case <-held:
+	case <-time.After(10 * time.Second):
+		t.Fatal("big.fit was not held")
+	}
 	v := e.wait(stCopying)
 	if v.Chip != "Copying" || v.Progress == nil || v.Progress.Total != 1003 {
 		t.Errorf("copying: %+v", v)
 	}
 	// Stop once a.jpg is copied and big.fit is held.
+	deadline := time.Now().Add(10 * time.Second)
 	for {
 		e.c.mu.Lock()
 		_, held := e.c.st.flight["MyWorks/big.fit"]
@@ -205,6 +214,9 @@ func TestCopyStopMidFile(t *testing.T) {
 		e.c.mu.Unlock()
 		if ready {
 			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("a.jpg was not copied while big.fit was held")
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
