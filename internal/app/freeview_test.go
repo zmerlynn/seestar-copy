@@ -3,7 +3,7 @@ package app
 import (
 	"errors"
 	"io/fs"
-	"slices"
+	"reflect"
 	"testing"
 
 	"github.com/zmerlynn/seestar-copy/internal/engine"
@@ -30,11 +30,16 @@ func TestFreeWording(t *testing.T) {
 			preview: &engine.DeleteResult{Files: []engine.DeleteFile{{Path: "a.jpg", Size: 3, Outcome: engine.FileDeleted}}}},
 			freeView{Title: "1 file (3 B) matches the saved copy records.", Sub: "Any age · Your copies were not checked.", ID: 2, Trust: true,
 				Groups: []freeGroup{{Folder: ".", Name: "Share", Bytes: 3, Size: "3 B", Files: []freeFile{{"a.jpg", "3 B"}}}}}},
-		{"done with kept", freeStatus{state: frDone, deleted: 1, bytes: 2000, result: engine.DeleteResult{Files: []engine.DeleteFile{
+		{"done with kept", freeStatus{state: frDone, set: Settings{OlderThanDays: 7}, deleted: 1, bytes: 2000, result: engine.DeleteResult{Files: []engine.DeleteFile{
 			{Path: "a", Outcome: engine.FileDeleted}, {Path: "b", Outcome: engine.FileKept, Reason: engine.KeepRaced},
-			{Path: "c", Outcome: engine.FileFailed, Reason: "open: no such file"}}}},
-			freeView{Title: "Deleted 1 file.", Text: "Freed 2.0 KB on the telescope.", Kept: "1 file was kept. 1 file couldn't be checked.",
-				KeptList: []failure{{"b", "kept: changed on the telescope since it was copied"}, {"c", "couldn't be checked: open: no such file"}}}},
+			{Path: "c", Outcome: engine.FileFailed, Reason: "open: no such file"}, {Path: "d", Outcome: engine.FileRecent}}}},
+			freeView{Title: "Deleted 1 file.", Text: "Freed 2.0 KB on the telescope.", Kept: "2 files were kept. 1 file couldn't be checked.",
+				KeptList: []failure{{"b", "kept: changed on the telescope since it was copied"}, {"c", "couldn't be checked: open: no such file"},
+					{"d", "kept: newer than 7 days"}}}},
+		{"deleting", freeStatus{state: frDeleting, deleted: 2, total: 5, current: "MyWorks/b.jpg"},
+			freeView{Title: "Deleting 3 of 5…", Progress: &freeBar{Done: 2, Total: 5}, File: "Last deleted: MyWorks/b.jpg"}},
+		{"deleting the first", freeStatus{state: frDeleting, total: 5},
+			freeView{Title: "Deleting 1 of 5…", Progress: &freeBar{Done: 0, Total: 5}}},
 		{"failed after some", freeStatus{state: frFailed, deleted: 2, err: refused, result: engine.DeleteResult{Files: []engine.DeleteFile{
 			{Path: "MyWorks/b.jpg", Outcome: engine.FileFailed, Reason: refused.Error()}}}},
 			freeView{Title: "Stopped: the telescope refused to delete MyWorks/b.jpg (permission denied).", Text: "2 files were deleted before this; nothing after it."}},
@@ -45,25 +50,10 @@ func TestFreeWording(t *testing.T) {
 	} {
 		got := c.st.view()
 		c.want.State = c.st.state
-		if !equalView(got, c.want) {
+		if !reflect.DeepEqual(got, c.want) {
 			t.Errorf("%s:\n got %+v\nwant %+v", c.name, got, c.want)
 		}
 	}
-}
-
-func equalView(a, b freeView) bool {
-	if (a.Progress == nil) != (b.Progress == nil) || a.Progress != nil && *a.Progress != *b.Progress {
-		return false
-	}
-	a.Progress, b.Progress = nil, nil
-	ga, gb := a.Groups, b.Groups
-	ka, kb := a.KeptList, b.KeptList
-	a.Groups, b.Groups, a.KeptList, b.KeptList = nil, nil, nil, nil
-	return a.State == b.State && a.Title == b.Title && a.Text == b.Text && a.Sub == b.Sub && a.ID == b.ID &&
-		a.Trust == b.Trust && a.Kept == b.Kept && a.File == b.File && a.Changed == b.Changed &&
-		slices.Equal(ka, kb) && slices.EqualFunc(ga, gb, func(x, y freeGroup) bool {
-		return x.Folder == y.Folder && x.Name == y.Name && x.Bytes == y.Bytes && x.Size == y.Size && slices.Equal(x.Files, y.Files)
-	})
 }
 
 // Each keep reason has a plain wording.

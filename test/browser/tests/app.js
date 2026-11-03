@@ -129,7 +129,7 @@ const freeViews = {
     kept: 'Kept: 1 changed on the telescope',
     kept_list: [{ path: longPath, reason: 'changed on the telescope since it was copied' }],
   },
-  deleting: { state: 'deleting', title: 'Deleting 2 of 2…', progress: { done: 1, total: 2 }, file: longPath },
+  deleting: { state: 'deleting', title: 'Deleting 2 of 2…', progress: { done: 1, total: 2 }, file: 'Last deleted: ' + longPath },
   done: {
     state: 'done', title: 'Deleted 1 file.', text: 'Freed 33.2 MB on the telescope.', kept: '1 file was kept.',
     kept_list: [{ path: longPath, reason: 'kept: changed on the telescope since it was copied' }],

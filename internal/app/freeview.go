@@ -169,7 +169,11 @@ func (st *freeStatus) view() freeView {
 	case frDeleting:
 		v.Title = fmt.Sprintf("Deleting %s of %s…", num(min(st.deleted+1, st.total)), num(st.total))
 		v.Progress = &freeBar{Done: int64(st.deleted), Total: int64(st.total)}
-		v.File, v.Stopping = st.current, st.stopping
+		// The engine reports a file once it is deleted, not as it starts.
+		if st.current != "" {
+			v.File = "Last deleted: " + st.current
+		}
+		v.Stopping = st.stopping
 	case frDone:
 		v.Title = "Deleted " + many(st.deleted, "file", "files")
 		if n := st.result.Folders; n > 0 {
@@ -177,7 +181,7 @@ func (st *freeStatus) view() freeView {
 		}
 		v.Title += "."
 		v.Text = "Freed " + size(float64(st.bytes)) + " on the telescope."
-		v.Kept, v.KeptList = doneCounts(st.result.Files)
+		v.Kept, v.KeptList = doneCounts(st.result.Files, days)
 	case frStopped:
 		v.Title = "Stopped after " + many(st.deleted, "file", "files") + " (" + size(float64(st.bytes)) + ")."
 		v.Text = "Nothing else was deleted. Run it again to carry on."
@@ -256,9 +260,10 @@ func keptReason(d engine.DeleteFile, days int) (short, long string) {
 	return "name the telescope can't handle", "name the telescope can't handle exactly"
 }
 
-// doneCounts words what a delete kept or couldn't check: "7 files were
-// kept. 2 files couldn't be checked.", and each file with its reason.
-func doneCounts(files []engine.DeleteFile) (string, []failure) {
+// doneCounts words what a delete with the age limit days kept or couldn't
+// check: "7 files were kept. 2 files couldn't be checked.", and each file
+// with its reason.
+func doneCounts(files []engine.DeleteFile, days int) (string, []failure) {
 	kept, failed := 0, 0
 	var list []failure
 	for _, d := range files {
@@ -270,7 +275,7 @@ func doneCounts(files []engine.DeleteFile) (string, []failure) {
 		default:
 			kept++
 		}
-		_, long := keptReason(d, 0)
+		_, long := keptReason(d, days)
 		if d.Outcome != engine.FileFailed {
 			long = "kept: " + long
 		}
