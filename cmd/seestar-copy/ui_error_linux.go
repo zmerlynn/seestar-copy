@@ -1,4 +1,4 @@
-//go:build gui && cgo
+//go:build gui && cgo && !guitest
 
 package main
 

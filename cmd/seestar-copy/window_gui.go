@@ -22,7 +22,7 @@ var icon []byte
 
 // present shows the app in a native window. The dialogs it returns belong
 // to that window and answer Cancel until it exists.
-func present(io.Writer) (func(context.Context, string, func()) error, *app.Native) {
+func present(out io.Writer) (func(context.Context, string, func()) error, *app.Native) {
 	var window atomic.Pointer[application.WebviewWindow]
 	var wails atomic.Pointer[application.App]
 	native := &app.Native{
@@ -55,8 +55,12 @@ func present(io.Writer) (func(context.Context, string, func()) error, *app.Nativ
 		if err := checkWindowSandbox(); err != nil {
 			return err
 		}
+		fix, err := newFixture(ctx, quit, out)
+		if err != nil {
+			return err
+		}
 		return runWindow(ctx, quit, func(c windowCallbacks) windowActions {
-			a := application.New(application.Options{
+			o := application.Options{
 				Name:                        "seestar-copy",
 				Icon:                        icon,
 				DisableDefaultSignalHandler: true,
@@ -68,12 +72,15 @@ func present(io.Writer) (func(context.Context, string, func()) error, *app.Nativ
 				Windows: application.WindowsOptions{WndProcInterceptor: func(_ uintptr, msg uint32, wParam, _ uintptr) (uintptr, bool) {
 					return c.endSession(msg, wParam)
 				}},
-			})
+			}
+			fix.configure(&o)
+			a := application.New(o)
 			options := application.WebviewWindowOptions{Title: "seestar-copy", Width: 760, Height: 700, URL: url}
 			options.Linux.Icon = icon
 			w := a.Window.NewWithOptions(options)
 			w.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) { c.closing(e.Cancel) })
 			a.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) { c.started() })
+			fix.attach(a, w)
 			wails.Store(a)
 			window.Store(w)
 			return windowActions{run: a.Run, quit: a.Quit}
