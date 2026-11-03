@@ -550,7 +550,9 @@ func (c *controller) view(now time.Time) copyView {
 func (st *status) progress(now time.Time) *progressView {
 	done := st.copied()
 	p := &progressView{Done: done, Total: max(st.bytes, 1), Bytes: size(float64(done)) + " of " + size(float64(st.bytes)), Flight: []flight{}}
-	if speed, ok := st.meter.speed(); ok {
+	// A failed download's bytes leave the count, so the speed can drop
+	// below zero for a while; it is hidden then.
+	if speed, ok := st.meter.speed(); ok && speed > 0 {
 		p.Speed = size(speed) + "/s"
 		p.Left = timeLeft(now.Sub(st.copyStart), speed, st.bytes-done)
 	}

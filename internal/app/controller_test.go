@@ -17,6 +17,7 @@ import (
 	"testing/fstest"
 	"time"
 
+	"github.com/zmerlynn/seestar-copy/internal/copier"
 	"github.com/zmerlynn/seestar-copy/internal/engine"
 	"github.com/zmerlynn/seestar-copy/internal/plan"
 	"github.com/zmerlynn/seestar-copy/internal/remote"
@@ -340,6 +341,54 @@ func TestCopyPassStates(t *testing.T) {
 		v.Notice != "2 files couldn't be copied. They'll be tried again at the next check." || len(v.Failed) != 2 || v.Failed[0].Path != "a:b.jpg" ||
 		v.Summary != "Copied 3 files (1.2 MB) in 2 min 31 s. 2 failed." {
 		t.Errorf("failures: %+v", v)
+	}
+}
+
+// The progress view combines the hooks' calls: a fixed total, bytes done
+// and in flight, each file's percentage, and speed and time left only
+// once they are known. A failed file's bytes leave the count, and the
+// speed that then drops below zero is hidden.
+func TestCopyProgress(t *testing.T) {
+	c := newCopyEnv(t, nil).c
+	c.st = status{state: stListing}
+	h := c.hooks(t.Context())
+	h.Planned(2, 30e6)
+	t0 := time.Unix(1000, 0)
+	c.st.copyStart, c.st.meter = t0, meter{}
+	c.st.meter.add(t0, 0)
+	at := func(s int) time.Time { return t0.Add(time.Duration(s) * time.Second) }
+	file := func(p string, kind plan.Kind) plan.Decision { return plan.Decision{Kind: kind, Path: p} }
+
+	h.Copying("a.fit", 0, 10e6)
+	h.Copying("b.fit", 0, 20e6)
+	h.Copying("a.fit", 5e6, 10e6)
+	h.Copying("b.fit", 10e6, 20e6)
+	c.sample(at(5))
+	v := c.view(at(5))
+	p := v.Progress
+	if v.Title != "Copying 2 of 2 files" || p == nil || p.Done != 15e6 || p.Total != 30e6 || p.Bytes != "15.0 MB of 30.0 MB" ||
+		p.Speed != "3.0 MB/s" || p.Left != "" || p.Found != "" ||
+		!slices.Equal(p.Flight, []flight{{"a.fit", 50}, {"b.fit", 50}}) {
+		t.Errorf("at 5 s: %q %+v", v.Title, p)
+	}
+
+	h.Done(copier.Result{Decision: file("a.fit", plan.Copy), Record: state.Record{Size: 10e6}})
+	h.Done(copier.Result{Decision: file("c.fit", plan.Adopt)})
+	h.Copying("b.fit", 15e6, 20e6)
+	c.sample(at(10))
+	v = c.view(at(10))
+	p = v.Progress
+	if v.Title != "Copying 2 of 2 files" || p.Done != 25e6 || p.Total != 30e6 || p.Speed != "2.5 MB/s" || p.Left != "Less than a minute left" ||
+		p.Found != "Found already in your folder: 1" || !slices.Equal(p.Flight, []flight{{"b.fit", 75}}) {
+		t.Errorf("at 10 s: %q %+v", v.Title, p)
+	}
+
+	h.Done(copier.Result{Decision: file("b.fit", plan.Copy), Err: errors.New("the connection was reset")})
+	c.sample(at(16))
+	v = c.view(at(16))
+	p = v.Progress
+	if p.Done != 10e6 || p.Speed != "" || p.Left != "" || len(p.Flight) != 0 {
+		t.Errorf("after b.fit failed: %+v", p)
 	}
 }
 
