@@ -13,9 +13,9 @@ telescope is somewhere else.
 
 ## What it doesn't do
 
-- It never writes to the telescope, except when you run `delete --force`:
-  it doesn't rename or upload anything there, and `sync`, `find` and
-  `browse` only read.
+- It only changes the telescope when you confirm Free up space in the app or
+  run `delete --force`. It never renames or uploads anything there, and
+  `sync`, `find` and `browse` only read.
 - It doesn't delete or move anything in your folder, sort images by night, or
   stack or process them. What you do with the files after they land is up to
   you.
