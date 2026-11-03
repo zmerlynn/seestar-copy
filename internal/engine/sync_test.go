@@ -60,10 +60,13 @@ func TestSyncHooks(t *testing.T) {
 		Listed:  func(n int) { listed = append(listed, n) },
 		Planned: func(files int, bytes int64) { planned = append(planned, [2]int64{int64(files), bytes}) },
 		Copying: func(p string, n, size int64) {
-			if n != size {
-				t.Errorf("Copying %s: got %d of %d bytes; a fast copy reports only once, at the end", p, n, size)
+			switch n {
+			case 0:
+			case size:
+				copying = append(copying, p)
+			default:
+				t.Errorf("Copying %s: got %d of %d bytes; a fast copy reports only its start and its end", p, n, size)
 			}
-			copying = append(copying, p)
 		},
 		Done:     func(r copier.Result) { done = append(done, r.Decision.Path) },
 		PassDone: func(s Summary) { sums = append(sums, s) },
