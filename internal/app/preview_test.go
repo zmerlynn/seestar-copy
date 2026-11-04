@@ -256,12 +256,20 @@ func TestPreviewDiscardAtEnd(t *testing.T) {
 func TestPreviewListing(t *testing.T) {
 	e := newPreviewEnv(t, nil)
 	e.p.st = previewStatus{state: pvRunning, endpoint: "192.0.2.10:445", listing: true}
-	if v := e.p.view(); v.Title != "Looking for new files…" {
+	if v := e.p.view(); v.Title != "Looking for new files…" || v.ToCopy != "Nothing to copy so far" {
 		t.Errorf("listing: %+v", v)
 	}
 	e.p.st.folders = 12
 	if v := e.p.view(); v.Title != "Looking for new files… 12 folders checked." || v.Path != "" {
 		t.Errorf("listing: %+v", v)
+	}
+	e.p.st.files, e.p.st.bytes = 2, 3_000_000
+	if v := e.p.view(); v.ToCopy != "2 to copy so far (3.0 MB)" {
+		t.Errorf("listing: %+v", v)
+	}
+	e.p.st.listing = false
+	if v := e.p.view(); v.ToCopy != "" {
+		t.Errorf("connecting: %+v", v)
 	}
 	// A real run names each folder as it is listed.
 	e = newPreviewEnv(t, fstest.MapFS{"MyWorks/M 31/a.jpg": image("a")})
@@ -271,12 +279,14 @@ func TestPreviewListing(t *testing.T) {
 		sess, err := dial(ctx, endpoint)
 		return walkSpy{sess, func(p string, dir bool) {
 			if v := e.p.view(); dir && v != nil {
-				seen = append(seen, v.Title+" "+v.Path)
+				seen = append(seen, v.Title+" "+v.Path+" "+v.ToCopy)
 			}
 		}}, err
 	}
-	e.run()
-	want := []string{"Looking for new files… 1 folder checked. Listing MyWorks…", "Looking for new files… 2 folders checked. Listing MyWorks/M 31…"}
+	if v := e.run(); v == nil || v.ToCopy != "" {
+		t.Errorf("done: %+v", v)
+	}
+	want := []string{"Looking for new files… 1 folder checked. Listing MyWorks… Nothing to copy so far", "Looking for new files… 2 folders checked. Listing MyWorks/M 31… Nothing to copy so far"}
 	if !slices.Equal(seen, want) {
 		t.Errorf("while listing: got %q, want %q", seen, want)
 	}
