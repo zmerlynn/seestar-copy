@@ -98,11 +98,11 @@ func TestSyncHooks(t *testing.T) {
 // slowWalk is a session whose listing takes a second for each entry.
 type slowWalk struct{ remote.Session }
 
-func (s slowWalk) Walk(ctx context.Context, skip func(string, bool) bool) ([]remote.Entry, error) {
+func (s slowWalk) Walk(ctx context.Context, skip func(string, bool) bool, kept func(remote.Entry)) ([]remote.Entry, error) {
 	return s.Session.Walk(ctx, func(p string, dir bool) bool {
 		time.Sleep(time.Second)
 		return skip(p, dir)
-	})
+	}, kept)
 }
 
 // While a pass lists the share, ToCopy has what it would download from

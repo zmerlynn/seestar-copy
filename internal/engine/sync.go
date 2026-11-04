@@ -403,7 +403,7 @@ func downloads(decisions []plan.Decision) (files int, bytes int64) {
 	return files, bytes
 }
 
-// toCopy returns a func for [remote.WithListed] that keeps the entries
+// toCopy returns a kept func for [remote.Session.Walk] that keeps the entries
 // listed so far and calls h, as [Hooks.ToCopy] says, with what the pass
 // would download if the listing ended there. Deciding blocks the listing,
 // so the next count also waits nine times as long as one took: a large
@@ -439,10 +439,11 @@ type selection struct {
 // listing failure, of the root or of a folder that is kept, fails the pass;
 // the returned selection then holds what was left out before it.
 func (s *syncer) list(ctx context.Context, sess remote.Session) ([]plan.Entry, selection, error) {
+	var kept func(remote.Entry)
 	if h := s.opts.Hooks.ToCopy; h != nil {
-		ctx = remote.WithListed(ctx, s.toCopy(h))
+		kept = s.toCopy(h)
 	}
-	entries, out, err := s.opts.Selector.walk(ctx, sess, s.opts.Hooks.Listed)
+	entries, out, err := s.opts.Selector.walk(ctx, sess, s.opts.Hooks.Listed, kept)
 	sel := selection{LeftOut: out}
 	if err != nil {
 		return nil, sel, fmt.Errorf("list the share: %w", err)

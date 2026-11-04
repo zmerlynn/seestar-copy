@@ -154,7 +154,7 @@ type failDir struct {
 	dir string
 }
 
-func (f failDir) Walk(context.Context, func(string, bool) bool) ([]remote.Entry, error) {
+func (f failDir) Walk(context.Context, func(string, bool) bool, func(remote.Entry)) ([]remote.Entry, error) {
 	return nil, &fs.PathError{Op: "readdir", Path: f.dir, Err: errors.New("access denied")}
 }
 
@@ -299,12 +299,12 @@ type walkSpy struct {
 	after func(p string, dir bool)
 }
 
-func (s walkSpy) Walk(ctx context.Context, skip func(string, bool) bool) ([]remote.Entry, error) {
+func (s walkSpy) Walk(ctx context.Context, skip func(string, bool) bool, kept func(remote.Entry)) ([]remote.Entry, error) {
 	return s.Session.Walk(ctx, func(p string, dir bool) bool {
 		out := skip(p, dir)
 		s.after(p, dir)
 		return out
-	})
+	}, kept)
 }
 
 // The copy API runs and cancels a preview while copying is off. Start,
