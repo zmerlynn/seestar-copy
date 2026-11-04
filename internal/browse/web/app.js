@@ -181,7 +181,7 @@ function row(e) {
   const modified = el('td', new Date(e.mtime).toLocaleString());
   modified.title = e.mtime;
   const status = el('td', undefined, 'st');
-  if (e.status) status.append(el('span', e.status, 'badge ' + e.status));
+  if (e.status) status.append(el('span', e.status, 'badge ' + e.status.replace(' ', '-')));
   const save = el('td');
   if (file) {
     const a = el('a', 'Save');
@@ -202,6 +202,7 @@ function render(data) {
   const files = data.entries.filter((e) => e.type === 'file');
   rows.replaceChildren(...dirs.map(row), ...files.map(row));
   table.hidden = rows.children.length === 0;
+  $('key').hidden = table.hidden || !data.statuses;
   statusLine.textContent = table.hidden ? 'Empty folder' : count(dirs.length, 'folder') + ', ' + count(files.length, 'file') + '.';
 }
 
@@ -215,6 +216,7 @@ async function load(p, focus) {
   if (focus) crumbs.lastChild.focus();
   statusLine.textContent = 'Loading…';
   table.hidden = true;
+  $('key').hidden = true;
   rows.replaceChildren();
   let data;
   try {
