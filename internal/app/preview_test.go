@@ -271,8 +271,9 @@ func TestPreviewListing(t *testing.T) {
 	if v := e.p.view(); v.ToCopy != "" {
 		t.Errorf("connecting: %+v", v)
 	}
-	// A real run names each folder as it is listed.
-	e = newPreviewEnv(t, fstest.MapFS{"MyWorks/M 31/a.jpg": image("a")})
+	// A real run names each folder as it is listed, and counts A.jpg,
+	// listed first.
+	e = newPreviewEnv(t, fstest.MapFS{"A.jpg": image("a"), "MyWorks/M 31/a.jpg": image("a")})
 	var seen []string
 	dial := e.p.dial
 	e.p.dial = func(ctx context.Context, endpoint string) (remote.Session, error) {
@@ -286,7 +287,7 @@ func TestPreviewListing(t *testing.T) {
 	if v := e.run(); v == nil || v.ToCopy != "" {
 		t.Errorf("done: %+v", v)
 	}
-	want := []string{"Looking for new files… 1 folder checked. Listing MyWorks… Nothing to copy so far", "Looking for new files… 2 folders checked. Listing MyWorks/M 31… Nothing to copy so far"}
+	want := []string{"Looking for new files… 1 folder checked. Listing MyWorks… 1 to copy so far (1 B)", "Looking for new files… 2 folders checked. Listing MyWorks/M 31… 1 to copy so far (1 B)"}
 	if !slices.Equal(seen, want) {
 		t.Errorf("while listing: got %q, want %q", seen, want)
 	}
