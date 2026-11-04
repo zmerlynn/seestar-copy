@@ -95,6 +95,90 @@ func TestSyncHooks(t *testing.T) {
 	}
 }
 
+// slowWalk is a session whose listing takes a second for each entry.
+type slowWalk struct{ remote.Session }
+
+func (s slowWalk) Walk(ctx context.Context, skip func(string, bool) bool) ([]remote.Entry, error) {
+	return s.Session.Walk(ctx, func(p string, dir bool) bool {
+		time.Sleep(time.Second)
+		return skip(p, dir)
+	})
+}
+
+// While a pass lists the share, ToCopy has what it would download from
+// the entries listed so far, by the pass's own decisions: a file too new to
+// copy or already in the folder is not counted, and a folder listed later
+// whose name clashes with an earlier one takes back the files counted
+// there. At the end of the listing it equals Planned. It counts at most
+// once a second, so a fast listing counts only its first entry.
+func TestSyncToCopy(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		old := time.Now().Add(-time.Hour)
+		f := func(data string) *fstest.MapFile { return &fstest.MapFile{Data: []byte(data), ModTime: old} }
+		o := syncOptions(t, fstest.MapFS{
+			"MyWorks/M 31/a.fit":   f("abc"),
+			"MyWorks/M 42/b.fit":   f("abcd"),
+			"MyWorks/M 42/had.fit": f("hh"),
+			"MyWorks/M 42/new.fit": &fstest.MapFile{Data: []byte("n"), ModTime: time.Now().Add(time.Hour)},
+			"MyWorks/m 31/c.fit":   f("c"),
+		}, nil)
+		had := filepath.Join(o.Dest, "MyWorks", "M 42", "had.fit")
+		if err := os.MkdirAll(filepath.Dir(had), 0o777); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(had, []byte("hh"), 0o666); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(had, old, old); err != nil {
+			t.Fatal(err)
+		}
+		dial := o.Dial
+		slow := true
+		o.Dial = func(ctx context.Context, endpoint string) (remote.Session, error) {
+			sess, err := dial(ctx, endpoint)
+			if slow {
+				sess = slowWalk{sess}
+			}
+			return sess, err
+		}
+		var log []string
+		o.Hooks = Hooks{
+			Listed:  func(p string, _ int) { log = append(log, "listing "+p) },
+			ToCopy:  func(files int, bytes int64) { log = append(log, fmt.Sprintf("to copy %d %d", files, bytes)) },
+			Planned: func(files int, bytes int64) { log = append(log, fmt.Sprintf("planned %d %d", files, bytes)) },
+		}
+		if err := RunSync(t.Context(), o, discard); err == nil || err.Error() != "failed files: 2" {
+			t.Fatalf("got err %v, want failed files: 2", err)
+		}
+		// A count follows each entry: the clash of "m 31" fails
+		// "M 31/a.fit", counted before it, and "m 31/c.fit".
+		want := []string{
+			"listing MyWorks", "to copy 0 0",
+			"listing MyWorks/M 31", "to copy 0 0", "to copy 1 3",
+			"listing MyWorks/M 42", "to copy 1 3", "to copy 2 7", "to copy 2 7", "to copy 2 7",
+			"listing MyWorks/m 31", "to copy 1 4", "to copy 1 4",
+			"planned 1 4",
+		}
+		if !slices.Equal(log, want) {
+			t.Errorf("hooks:\ngot  %q\nwant %q", log, want)
+		}
+
+		slow, log = false, nil
+		if err := RunSync(t.Context(), o, discard); err == nil {
+			t.Fatal("second pass: want the clash to fail it")
+		}
+		var counts []string
+		for _, l := range log {
+			if strings.HasPrefix(l, "to copy") {
+				counts = append(counts, l)
+			}
+		}
+		if want := []string{"to copy 0 0"}; !slices.Equal(counts, want) {
+			t.Errorf("fast listing: got counts %q, want %q", counts, want)
+		}
+	})
+}
+
 // Summary.Failed names every failed file and why: those the decisions
 // refused, then those whose copy failed.
 func TestSummaryFailed(t *testing.T) {
@@ -342,8 +426,17 @@ func TestDryRunDecided(t *testing.T) {
 	times := regexp.MustCompile(`(time|elapsed)=\S+`)
 	run := func(hooked bool) (string, error) {
 		var b strings.Builder
-		o.Hooks.Decided = nil
+		o.Hooks.Decided, o.Hooks.ToCopy = nil, nil
 		if hooked {
+			var toCopy [2]int64
+			o.Hooks.ToCopy = func(files int, bytes int64) { toCopy = [2]int64{int64(files), bytes} }
+			defer func() {
+				// The first entry is counted; with a second between
+				// counts, a fast listing has no other.
+				if want := [2]int64{0, 0}; toCopy != want {
+					t.Errorf("ToCopy: got %v, want %v", toCopy, want)
+				}
+			}()
 			calls := 0
 			o.Hooks.Decided = func(ds []plan.Decision, out LeftOut) {
 				calls++
