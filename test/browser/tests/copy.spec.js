@@ -221,11 +221,11 @@ test('the status region, bars and focus follow the stage, not each tick', async 
   v = { state: 'listing', title: 'Looking for new files… 4 folders checked.', path: 'Listing MyWorks/M 42…', tocopy: '312 to copy so far (4.1 GB)' };
   await expect(title(page)).toHaveText('Looking for new files… 4 folders checked.');
   await expect(path).toHaveText('Listing MyWorks/M 42…');
-  // What is found to copy so far is one line under the title, not in the
-  // status region.
+  // What is found to copy so far is under the title, not in the status
+  // region, and wraps rather than losing its size.
   const tocopy = page.locator('#c-tocopy');
   await expect(tocopy).toHaveText('312 to copy so far (4.1 GB)');
-  await expect(tocopy).toHaveCSS('white-space', 'nowrap');
+  await expect(tocopy).toHaveCSS('white-space', 'normal');
   expect(await page.evaluate(() => {
     const t = document.querySelector('#c-title');
     return t.nextElementSibling.id;
@@ -369,7 +369,7 @@ test('a running preview has a bar and Cancel, which moves focus to the heading a
   v = { ...base, preview: { state: 'running', title: 'Looking for new files… 4 folders checked.', path: 'Listing MyWorks/M 31…', tocopy: '1 to copy so far (2 B)' } };
   await expect(page.locator('#c-ptitle')).toHaveText('Looking for new files… 4 folders checked.');
   await expect(page.locator('#c-ptocopy')).toHaveText('1 to copy so far (2 B)');
-  await expect(page.locator('#c-ptocopy')).toHaveCSS('white-space', 'nowrap');
+  await expect(page.locator('#c-ptocopy')).toHaveCSS('white-space', 'normal');
   await expect(page.locator('#c-ppath')).toHaveText('Listing MyWorks/M 31…');
   await expect(page.locator('#c-ppath')).toHaveAttribute('title', 'Listing MyWorks/M 31…');
   await expect(page.locator('#c-ppath')).toHaveCSS('text-overflow', 'ellipsis');
