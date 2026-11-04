@@ -345,7 +345,7 @@ test('Browse marks what Leave out leaves out, with a key', async ({ page, startA
   await tab(page, 'Browse').click();
   await expect(browseStatus(page)).toHaveText(rootStatus);
   const key = frame(page).locator('#key');
-  await expect(key).toHaveText('new: will be copied · copied: already copied · changed: differs from the copy · left out: not copied by the current selection');
+  await expect(key).toHaveText('new: will be copied · copied: already copied · changed: differs from the copy · left out: not copied by the selection');
   await expect(key).toBeVisible();
   const badge = (name) => frame(page).locator('#list tbody tr').filter({ has: frame(page).getByText(name, { exact: true }) }).locator('.badge');
   await expect(badge('empty.txt')).toHaveText('new');

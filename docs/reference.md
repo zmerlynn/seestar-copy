@@ -908,7 +908,7 @@ folder the selection keeps has no status. A one-line key under the table
 says what each status means:
 
 ```text
-new: will be copied · copied: already copied · changed: differs from the copy · left out: not copied by the current selection
+new: will be copied · copied: already copied · changed: differs from the copy · left out: not copied by the selection
 ```
 
 A file's preview is the telescope's own small image: for a file `S.ext`,
