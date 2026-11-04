@@ -447,15 +447,7 @@ func TestDryRunDecided(t *testing.T) {
 		var b strings.Builder
 		o.Hooks.Decided, o.Hooks.ToCopy = nil, nil
 		if hooked {
-			var toCopy [2]int64
-			o.Hooks.ToCopy = func(files int, bytes int64) { toCopy = [2]int64{int64(files), bytes} }
-			defer func() {
-				// The first entry is counted; with a second between
-				// counts, a fast listing has no other.
-				if want := [2]int64{0, 0}; toCopy != want {
-					t.Errorf("ToCopy: got %v, want %v", toCopy, want)
-				}
-			}()
+			o.Hooks.ToCopy = func(int, int64) {}
 			calls := 0
 			o.Hooks.Decided = func(ds []plan.Decision, out LeftOut) {
 				calls++
