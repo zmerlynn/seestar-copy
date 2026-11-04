@@ -904,12 +904,8 @@ instead of `copied`, `changed` or `new`: a sync pass would not copy it,
 whatever the state records. That is a file or folder an exclude matches,
 anything inside such a folder, and, with includes, whatever no include
 selects, by the same rules a pass uses. Folders show only `left out`; a
-folder the selection keeps has no status. A one-line key under the table
-says what each status means:
-
-```text
-new: will be copied · copied: already copied · changed: differs from the copy · left out: not copied by the selection
-```
+folder the selection keeps has no status. A key under the table explains
+the statuses.
 
 A file's preview is the telescope's own small image: for a file `S.ext`,
 `S_thn.jpg` in the same folder if there is one, and otherwise `S.jpg`. Browse
