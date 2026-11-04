@@ -600,6 +600,39 @@ func TestBrowseStatuses(t *testing.T) {
 	}
 }
 
+func TestBrowseLeftOut(t *testing.T) {
+	// Browse marks what the saved selection leaves out, and a save that
+	// changes the selection replaces browse.
+	e := newAppEnv(t, "")
+	list := func() string {
+		w := e.serve("GET", "/api/list?path=at%20192.0.2.10_445", "")
+		if w.Code != 200 {
+			t.Fatalf("list = %d %s", w.Code, w.Body)
+		}
+		return w.Body.String()
+	}
+	if w := e.post("/app/api/settings", goodInput); w.Code != 200 {
+		t.Fatal(w.Code)
+	}
+	if got := list(); !strings.Contains(got, `"status":"new"`) {
+		t.Errorf("before Leave out: %s", got)
+	}
+	leave := strings.Replace(goodInput, `"excludes":["Video","","/Preview"]`, `"excludes":["X.TXT"]`, 1)
+	if got := decode[struct {
+		BrowseChanged bool `json:"browse_changed"`
+	}](t, e.post("/app/api/settings", leave)); !got.BrowseChanged {
+		t.Error("a Leave out change kept browse")
+	}
+	if got := list(); !strings.Contains(got, `"status":"left out"`) {
+		t.Errorf("with Leave out: %s", got)
+	}
+	only := strings.Replace(goodInput, `"includes":[]`, `"includes":["*.fit"]`, 1)
+	e.post("/app/api/settings", only)
+	if got := list(); !strings.Contains(got, `"status":"left out"`) {
+		t.Errorf("with Only copy: %s", got)
+	}
+}
+
 func TestRunStartupError(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "app.json")
 	writeFile(t, path, "{")
