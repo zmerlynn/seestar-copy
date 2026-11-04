@@ -163,18 +163,37 @@ func TestSyncToCopy(t *testing.T) {
 			t.Errorf("hooks:\ngot  %q\nwant %q", log, want)
 		}
 
+		counts := func() []string {
+			var out []string
+			for _, l := range log {
+				if strings.HasPrefix(l, "to copy") {
+					out = append(out, l)
+				}
+			}
+			return out
+		}
 		slow, log = false, nil
 		if err := RunSync(t.Context(), o, discard); err == nil {
 			t.Fatal("second pass: want the clash to fail it")
 		}
-		var counts []string
-		for _, l := range log {
-			if strings.HasPrefix(l, "to copy") {
-				counts = append(counts, l)
-			}
+		if got, want := counts(), []string{"to copy 0 0"}; !slices.Equal(got, want) {
+			t.Errorf("fast listing: got counts %q, want %q", got, want)
 		}
-		if want := []string{"to copy 0 0"}; !slices.Equal(counts, want) {
-			t.Errorf("fast listing: got counts %q, want %q", counts, want)
+
+		// A count that takes 300 ms holds the next one off for ten times
+		// that from its start: with an entry each second, only every
+		// third entry is counted.
+		toCopy := o.Hooks.ToCopy
+		o.Hooks.ToCopy = func(files int, bytes int64) {
+			toCopy(files, bytes)
+			time.Sleep(300 * time.Millisecond)
+		}
+		slow, log = true, nil
+		if err := RunSync(t.Context(), o, discard); err == nil {
+			t.Fatal("third pass: want the clash to fail it")
+		}
+		if got, want := counts(), []string{"to copy 0 0", "to copy 1 3", "to copy 1 3"}; !slices.Equal(got, want) {
+			t.Errorf("slow counts: got %q, want %q", got, want)
 		}
 	})
 }
