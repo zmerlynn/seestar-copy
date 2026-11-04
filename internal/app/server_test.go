@@ -617,20 +617,26 @@ func TestBrowseLeftOut(t *testing.T) {
 	if got := list(); !strings.Contains(got, `"status":"new"`) {
 		t.Errorf("before Leave out: %s", got)
 	}
-	leave := strings.Replace(goodInput, `"excludes":["Video","","/Preview"]`, `"excludes":["X.TXT"]`, 1)
-	if got := decode[struct {
-		BrowseChanged bool `json:"browse_changed"`
-	}](t, e.post("/app/api/settings", leave)); !got.BrowseChanged {
-		t.Error("a Leave out change kept browse")
+	// Each save changes one setting from goodInput.
+	save := func(input, what string) {
+		w := e.post("/app/api/settings", input)
+		if got := decode[struct {
+			BrowseChanged bool `json:"browse_changed"`
+		}](t, w); w.Code != 200 || !got.BrowseChanged {
+			t.Errorf("saving %s kept browse: %d %s", what, w.Code, w.Body)
+		}
+		if got := list(); !strings.Contains(got, `"status":"left out"`) {
+			t.Errorf("with %s: %s", what, got)
+		}
 	}
-	if got := list(); !strings.Contains(got, `"status":"left out"`) {
-		t.Errorf("with Leave out: %s", got)
+	save(strings.Replace(goodInput, `"excludes":["Video","","/Preview"]`, `"excludes":["X.TXT"]`, 1), "Leave out")
+	if w := e.post("/app/api/settings", goodInput); w.Code != 200 {
+		t.Fatal(w.Code)
 	}
-	only := strings.Replace(goodInput, `"includes":[]`, `"includes":["*.fit"]`, 1)
-	e.post("/app/api/settings", only)
-	if got := list(); !strings.Contains(got, `"status":"left out"`) {
-		t.Errorf("with Only copy: %s", got)
+	if got := list(); !strings.Contains(got, `"status":"new"`) {
+		t.Errorf("before Only copy: %s", got)
 	}
+	save(strings.Replace(goodInput, `"includes":[]`, `"includes":["*.fit"]`, 1), "Only copy")
 }
 
 func TestRunStartupError(t *testing.T) {
