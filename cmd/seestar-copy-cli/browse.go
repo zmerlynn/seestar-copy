@@ -26,7 +26,6 @@ type browseOptions struct {
 	selection selectionFlags
 	// selector is set by validate from selection.
 	selector    engine.Selector
-	selected    string // the first selection flag given, if any
 	dest        string
 	destSet     bool
 	stateDir    string
@@ -67,13 +66,13 @@ a usage error.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			o.destSet = cmd.Flags().Changed("dest")
 			o.stateDirSet = cmd.Flags().Changed("state-dir")
-			for _, name := range []string{"exclude", "no-default-excludes", "include"} {
-				if o.selected == "" && cmd.Flags().Changed(name) {
-					o.selected = "--" + name
-				}
-			}
 			if err := o.validate(); err != nil {
 				return err
+			}
+			for _, name := range []string{"exclude", "no-default-excludes", "include"} {
+				if !o.destSet && cmd.Flags().Changed(name) {
+					return &usageError{Option: "--" + name, Rule: "give --dest with it; browse shows what the selection leaves out only with statuses"}
+				}
 			}
 			return runBrowse(cmd.Context(), o, cmd.OutOrStdout(), log)
 		},
@@ -115,9 +114,6 @@ func (o *browseOptions) validate() error {
 		return err
 	}
 	o.selector = sel
-	if o.selected != "" && !o.destSet {
-		return &usageError{Option: o.selected, Rule: "give --dest with it; browse shows what the selection leaves out only with statuses"}
-	}
 	return nil
 }
 
