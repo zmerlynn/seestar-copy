@@ -86,6 +86,9 @@ type Session interface {
 	// whether it is a directory, before a directory's contents are read.
 	// An entry for which it returns true is left out, and so is everything
 	// below it: that directory is never read.
+	//
+	// A func that [WithListed] put in ctx is called with each entry kept,
+	// as it is listed, including those listed before a failure.
 	Walk(ctx context.Context, skip func(path string, dir bool) bool) ([]Entry, error)
 	// ReadDir lists one folder, dir, which is "." for the root or a path
 	// ValidPath accepts; any other is refused with fs.ErrInvalid before
@@ -137,9 +140,20 @@ func kindOf(mode fs.FileMode) Kind {
 	}
 }
 
+// listedKey is the context key of [WithListed]'s func.
+type listedKey struct{}
+
+// WithListed returns a copy of ctx that has Session.Walk call listed with
+// each entry it keeps, as it lists it. As with net/http/httptrace, the
+// context carries the func, so a wrapper of a Session passes it on.
+func WithListed(ctx context.Context, listed func(Entry)) context.Context {
+	return context.WithValue(ctx, listedKey{}, listed)
+}
+
 // walk lists the root of fsys for Session.Walk.
 func walk(ctx context.Context, fsys fs.FS, skip func(string, bool) bool) ([]Entry, error) {
 	var entries []Entry
+	listed, _ := ctx.Value(listedKey{}).(func(Entry))
 	// The root is the first call. Telling it apart by path would not do: a
 	// listed name of "" or "." joins back to the root itself.
 	atRoot := true
@@ -177,7 +191,11 @@ func walk(ctx context.Context, fsys fs.FS, skip func(string, bool) bool) ([]Entr
 		if err != nil {
 			return err
 		}
-		entries = append(entries, Entry{Path: p, Size: info.Size(), ModTime: info.ModTime(), Kind: kindOf(info.Mode())})
+		e := Entry{Path: p, Size: info.Size(), ModTime: info.ModTime(), Kind: kindOf(info.Mode())}
+		entries = append(entries, e)
+		if listed != nil {
+			listed(e)
+		}
 		return nil
 	})
 	if err != nil {

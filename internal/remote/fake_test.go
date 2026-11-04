@@ -212,6 +212,49 @@ func (c cancelingFS) ReadDir(name string) ([]fs.DirEntry, error) {
 	return c.MapFS.ReadDir(name)
 }
 
+// WithListed's func gets each entry kept, with its size and mtime, as it
+// is listed: before the walk reads the next folder, and also when a later
+// folder fails the walk. Skipped entries never reach it.
+func TestWalkListed(t *testing.T) {
+	mtime := time.Unix(1761000000, 0)
+	base := fstest.MapFS{
+		"a/x":   {Data: []byte("xx"), ModTime: mtime},
+		"a/y":   {Data: []byte("y"), ModTime: mtime},
+		"b/z":   {Data: []byte("z"), ModTime: mtime},
+		"bad/z": {Data: []byte("z"), ModTime: mtime},
+	}
+	var log []string
+	var listed []Entry
+	ctx := WithListed(t.Context(), func(e Entry) {
+		listed = append(listed, e)
+		log = append(log, "listed "+e.Path)
+	})
+	got, err := NewFake(readsFS{base, "bad", &log}).Walk(ctx, func(p string, _ bool) bool { return p == "a/y" || p == "bad" })
+	if err != nil {
+		t.Fatal(err)
+	}
+	sameEntries(t, listed, got)
+	if want := []string{".", "listed a", "a", "listed a/x", "listed b", "b", "listed b/z"}; !slices.Equal(log, want) {
+		t.Errorf("calls %q, want %q", log, want)
+	}
+	if len(listed) != 4 || listed[1].Size != 2 || !listed[1].ModTime.Equal(mtime) {
+		t.Errorf("listed %v, want a/x with size 2 and its mtime", listed)
+	}
+
+	listed = nil
+	got, err = NewFake(readsFS{base, "bad", &log}).Walk(ctx, nil)
+	if !errors.Is(err, fs.ErrPermission) || got != nil {
+		t.Fatalf("Walk = %v, %v; want the error and no listing", got, err)
+	}
+	var paths []string
+	for _, e := range listed {
+		paths = append(paths, e.Path)
+	}
+	if want := []string{"a", "a/x", "a/y", "b", "b/z", "bad"}; !slices.Equal(paths, want) {
+		t.Errorf("listed before the failure %q, want %q", paths, want)
+	}
+}
+
 func TestWalkStopsWhenCanceledMidway(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
